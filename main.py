@@ -78,19 +78,14 @@ class Game:
         if OPENGL_VERSION == 3:
             self.shaderHandler.loadShader("default","shaders/3.3/vertex_new.shader","shaders/3.3/fragment_new.shader")
             self.shaderHandler.loadShader("default_transparent","shaders/3.3/vertex_new.shader","shaders/3.3/fragment_def_transparent.shader")
-            self.shaderHandler.loadShader("map","shaders/3.3/vertex_new_room.shader","shaders/3.3/fragment_map_infested.shader")
             self.shaderHandler.loadShader("font","shaders/3.3/vertex_font.shader","shaders/3.3/fragment_font.shader")
-            self.shaderHandler.loadShader("menuBg","shaders/3.3/vertex_new.shader","shaders/3.3/menuBg.shader")
-            self.shaderHandler.loadShader("hud","shaders/3.3/vertex_hud.shader","shaders/3.3/fragment_hud.shader")
             self.shaderHandler.loadShader("bezier","shaders/3.3/bezier.vert","shaders/3.3/bezier.frag")
         else:
             # TODO: Add pauseMenu shaders
             self.shaderHandler.loadShader("default","shaders/2.1/vertex_new.shader","shaders/2.1/fragment_new.shader")
             self.shaderHandler.loadShader("default_transparent","shaders/2.1/vertex_new.shader","shaders/2.1/fragment_def_transparent.shader")
-            self.shaderHandler.loadShader("map","shaders/2.1/vertex_new_room.shader","shaders/2.1/fragment_map_infested.shader")
             self.shaderHandler.loadShader("font","shaders/2.1/vertex_font.shader","shaders/2.1/fragment_font.shader")
-            self.shaderHandler.loadShader("menuBg","shaders/2.1/vertex_new.shader","shaders/2.1/menuBg.shader")
-
+            
 
         self.fontHandler = FontHandler(self.shaderHandler.getShader("font"))
 
@@ -115,7 +110,7 @@ class Game:
 
         self.table = Table("maps/empty.json")
 
-        self.tmpwg = WaveGenerator(self.table.prefabHandler, {"name":"32","pos":[0,0,0],"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/input_uvd.png"})
+        self.tmpwg = WaveGenerator(self.table.prefabHandler, {"name":"32","pos":[0.5,0,0],"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/input_uvd.png"})
 
 
         self.tmpcurve = BezierCurve(self.table.prefabHandler, {})
@@ -176,14 +171,12 @@ class Game:
             if hasattr(i, "update"):
                 i.update(self.FPSCounter.deltaTime,self.audioHandler)
 
-        #self.tmpwg.draw(self.shaderHandler,self.renderer,viewMat)
-        #self.tmpwg.update(self.FPSCounter.deltaTime,self.audioHandler)
+        self.tmpwg.draw(self.shaderHandler,self.renderer,viewMat)
+        self.tmpwg.update(self.FPSCounter.deltaTime,self.audioHandler)
 
         output = self.inputHandler.screenToWorld(self.proj,self.camera,self.inputHandler.mouseX,self.inputHandler.mouseY)
         self.tmpcurve.toPos = glm.vec3(output.x, output.y, 0)*51
-        #u_to = glm.vec3(self.tmpcurve.toPos[0],self.tmpcurve.toPos[1],self.tmpcurve.toPos[2])
-        #u_from = glm.vec3(self.tmpcurve.fromPos[0],self.tmpcurve.fromPos[1],self.tmpcurve.fromPos[2])
-        #print(u_to.x-0.7*(u_to.x-u_from.x),u_from.y,0)
+        
         self.tmpcurve.draw(self.shaderHandler,self.renderer,viewMat)
         
         self.fontHandler.drawText(popupText,-1*len(popupText)/50,-0.6,0.05,self.renderer)
