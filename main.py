@@ -111,11 +111,13 @@ class Game:
 
         self.table = Table("maps/empty.json")
 
-        self.tmpwg = WaveGenerator(self.table.prefabHandler, "32","wavegen",[0.5,0,0])
+        self.tmpwg = WaveGenerator(self.table.prefabHandler, "32","sine",[0.5,0,0])
         self.table.objects.append(self.tmpwg)
 
-        self.table.objects.append(WaveGenerator(self.table.prefabHandler, "3342","wavegen",[-1,1,0]))
+        self.table.objects.append(SpeakerOut(self.table.prefabHandler, "3342",[-1,1,0]))
 
+        self.audioHandler.speakerStart()
+        #self.audioHandler.playSound("res/audio/feel_cut.wav")
         self.mouseCurve = BezierCurve(self.table.prefabHandler, None, None)
 
         self.camera = Camera()
@@ -198,9 +200,6 @@ class Game:
         glutSetWindowTitle("AudioMixer - FPS: "+str(self.FPSCounter.FPS))
     
         self.audioHandler.update()
-
-
-
 
         self.renderer.Clear()
 

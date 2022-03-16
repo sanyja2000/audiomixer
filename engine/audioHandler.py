@@ -13,6 +13,10 @@ class AudioHandler:
         self.channelVolume = [1,0,0,0,0]
         self.isStopped = [0,0,0,0,0]
 
+        self.dataPlaying = np.zeros(2048)
+        self.dataReady = False
+        self.exit = False
+
         self.maxVolume = 0
 
         self.currentlyPlaying = {}
@@ -22,6 +26,31 @@ class AudioHandler:
             if self.currentlyPlaying[filename]:
                 return True
         return False
+
+    def speakerStart(self):
+        wf = wave.open("res/audio/feel_cut.wav", 'rb')
+        stream = self.p.open(format=self.p.get_format_from_width(wf.getsampwidth()),
+                        channels=wf.getnchannels(),
+                        rate=wf.getframerate(),
+                        output=True)#,stream_callback=self.fileCallback)
+        sformat = self.p.get_format_from_width(wf.getsampwidth())
+
+        stream.start_stream()
+        th = Thread(target=self.speakerOutPlayBlock, args=(wf,stream))
+        th.start()
+
+    def speakerOutPlayBlock(self,wf,stream):
+        #data = wf.readframes(1024)
+        while not self.exit:
+            if self.dataReady:
+                stream.write(self.dataPlaying)
+                #data = wf.readframes(1024)
+                #self.dataReady = False
+            else:
+                time.sleep(0.1)
+        stream.stop_stream()
+        stream.close()
+        
 
     def playSound(self,filename,volumeIndex=0):
         self.isStopped[volumeIndex] = 0

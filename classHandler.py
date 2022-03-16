@@ -126,14 +126,13 @@ class WaveGenerator(NodeElement):
         """Inputs: freq,amp. Output: wave signal"""
         
         NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/input_uvd.png"})
-        self.inputs = {"in1":0,"in2":4}
-        self.outputs = {"out1":0,"out2":0}
+        self.inputs = {"amp":0,"freq":4}
+        self.outputs = {"signal":0}
         self.connpoints = []
         for ind in range(len(self.outputs)):
             self.connpoints.append(ConnectionPoint(ph,self,list(self.outputs)[ind],"out",pos,glm.vec3([-0.55,-0.1*ind,0])))
         for ind in range(len(self.inputs)):
-            self.connpoints.append(ConnectionPoint(ph,self,list(self.inputs)[ind],"in",pos,glm.vec3([0.55,-0.1*ind,0])))
-        
+            self.connpoints.append(ConnectionPoint(ph,self,list(self.inputs)[ind],"in",pos,glm.vec3([0.55,-0.1*ind,0])))  
 
     def checkIntersect(self,x,y):
         for cp in self.connpoints:
@@ -155,6 +154,44 @@ class WaveGenerator(NodeElement):
             cp.updatePos(self.model.pos)
         
 
+
+class SpeakerOut(NodeElement):
+    def __init__(self,ph,name, pos):
+        """Inputs: freq,amp. Output: wave signal"""
+        
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/speaker.png"})
+        self.inputs = {"signal":0}
+        self.connpoints = []
+        self.time = 0
+        self.outputSample = np.array([],dtype=np.int16)
+        for ind in range(len(self.inputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,list(self.inputs)[ind],"in",pos,glm.vec3([0.55,-0.1*ind,0])))
+        
+    def checkIntersect(self,x,y):
+        for cp in self.connpoints:
+            if cp.checkIntersect(x,y):
+                return cp
+        if self.model.pos[0]-self.model.scale*1 <x<self.model.pos[0]+self.model.scale*1:
+            if self.model.pos[1]-self.model.scale*1 <y<self.model.pos[1]+self.model.scale*1:
+                return self
+        return None
+
+    def draw(self,shaderhandler,renderer,viewMat):
+        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
+        for cp in self.connpoints:
+            cp.draw(shaderhandler,renderer,viewMat)
+
+
+    def update(self,deltaTime,audioHandler):
+        self.time += deltaTime
+        for cp in self.connpoints:
+            cp.updatePos(self.model.pos)
+        self.outputSample=np.append(self.outputSample, np.sin(self.time))
+        if len(self.outputSample)>=500:
+            print(self.outputSample)
+            audioHandler.dataPlaying = self.outputSample
+            audioHandler.dataReady = False
+            self.outputSample = np.array([],dtype=np.int16)
 
 
 class BezierCurve:
