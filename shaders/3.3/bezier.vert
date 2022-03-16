@@ -17,7 +17,6 @@ void main()
 {
     float t = abs(position.z/99);
 
-
     vec3 cp1 = vec3(u_to.x-0.7*(u_to.x-u_from.x),u_from.y,0);
     //cp1 = cp1.zyx;
     vec3 cp2 = vec3(u_from.x+0.3*(u_to.x-u_from.x),u_to.y,0);

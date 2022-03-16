@@ -1,2 +1,1 @@
-{"type":"playable","objectList":[{"name":"cursor","type":"decoration","pos":[-0.58,0,0],"rot":[1.57,0,0],"scale":0.03,"file":"res/torus.obj","texture":"res/crystal.png"},
-    {"name":"cursor2","type":"decoration","pos":[0,0,0],"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/input_uvd.png"}]}
+{"type":"playable","objectList":[]}

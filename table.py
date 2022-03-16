@@ -19,6 +19,8 @@ class Table:
             for obj in self.JSONContent["objectList"]:
                 if obj["type"]=="decoration":
                     self.objects.append(Decoration(self.prefabHandler,obj))
+                if obj["type"]=="wavegen":
+                    self.objects.append(WaveGenerator(self.prefabHandler,obj["name"],obj["type"],obj["pos"]))
                 elif obj["type"]=="comment":
                     pass
                 else:

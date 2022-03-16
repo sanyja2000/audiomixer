@@ -1,7 +1,8 @@
 import math
+from turtle import position
 from typing import Text
 from engine.objectHandler import Object3D
-from engine.renderer import IndexBuffer, Texture, VertexArray, VertexBuffer, VertexBufferLayout
+from engine.renderer import IndexBuffer, Shader, Texture, VertexArray, VertexBuffer, VertexBufferLayout
 import numpy as np
 import time
 from PIL import Image
@@ -81,34 +82,83 @@ class Decoration:
         pass
         #self.model.SetRotation(np.array([self.model.rot[0],self.rot,self.model.rot[2]]))
 
-class WaveGenerator:
+class NodeElement:
     def __init__(self,ph,props):
-        """Basic wrapper for decoration objects. These don't interact with anything."""
+        """Inputs: freq,amp. Output: wave signal"""
         self.name = props["name"]
         self.model = ph.loadFile(props["file"],props["texture"])
         self.model.SetScale(props["scale"])
         self.model.SetPosition(np.array(props["pos"]))
         self.model.SetRotation(np.array(props["rot"]))
         self.model.defaultPosition = np.array(props["pos"])
-        self.inputs = []
-        self.outputs = []
+        self.inputs = {}
+        self.outputs = {}
 
         self.shaderName = "default"
-    def checkIntersect(self,x,y):
-        if self.model.pos[0]-self.model.scale*1 <x<self.model.pos[0]+self.model.scale*1:
-            if self.model.pos[1]-self.model.scale*1 <x<self.model.pos[1]+self.model.scale*1:
-                return True
-        return False
-
     def draw(self,shaderhandler,renderer,viewMat):
         self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
     def update(self,deltaTime,audioHandler):
         pass
 
+class ConnectionPoint:
+    def __init__(self,ph,parent,name,side,pos,posoffset):
+        """Connection points for inputs, outputs."""
+        self.side = side
+        self.name = name
+        self.parent = parent
+        self.model = ph.loadFile("res/torus.obj","res/crystal.png")
+        self.model.SetScale(0.03)
+        self.model.SetPosition(glm.vec3(pos)+glm.vec3(posoffset))
+        self.model.SetRotation(np.array([1.57,0,0]))
+        self.positionOffset = posoffset
+        self.shaderName = "default"
+    def draw(self,shaderhandler,renderer,viewMat):
+        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
+    def checkIntersect(self,x,y):
+        if((self.model.pos[0]-x)**2+(self.model.pos[1]-y)**2<0.007):
+            return True
+        return False
+    def updatePos(self,pos):
+        self.model.SetPosition(pos+self.positionOffset)
+
+class WaveGenerator(NodeElement):
+    def __init__(self,ph,name, type, pos):
+        """Inputs: freq,amp. Output: wave signal"""
+        
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/input_uvd.png"})
+        self.inputs = {"in1":0,"in2":4}
+        self.outputs = {"out1":0,"out2":0}
+        self.connpoints = []
+        for ind in range(len(self.outputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,list(self.outputs)[ind],"out",pos,glm.vec3([-0.55,-0.1*ind,0])))
+        for ind in range(len(self.inputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,list(self.inputs)[ind],"in",pos,glm.vec3([0.55,-0.1*ind,0])))
+        
+
+    def checkIntersect(self,x,y):
+        for cp in self.connpoints:
+            if cp.checkIntersect(x,y):
+                return cp
+        if self.model.pos[0]-self.model.scale*1 <x<self.model.pos[0]+self.model.scale*1:
+            if self.model.pos[1]-self.model.scale*1 <y<self.model.pos[1]+self.model.scale*1:
+                return self
+        return None
+
+    def draw(self,shaderhandler,renderer,viewMat):
+        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
+        for cp in self.connpoints:
+            cp.draw(shaderhandler,renderer,viewMat)
+
+
+    def update(self,deltaTime,audioHandler):
+        for cp in self.connpoints:
+            cp.updatePos(self.model.pos)
+        
+
 
 
 class BezierCurve:
-    def __init__(self,ph,props):
+    def __init__(self,ph,fcp,tcp):
         """Basic wrapper for decoration objects. These don't interact with anything."""
         self.name = "bez1"
         self.model = ph.loadFile("res/curve.obj","res/crystal.png")
@@ -118,8 +168,8 @@ class BezierCurve:
         self.model.defaultPosition = self.model.pos.copy()
         self.fromPos = np.array([0,0,0])
         self.toPos = np.array([100,50,0])
-
-        self.shaderName = "default"
+        self.fromConnPoint = fcp
+        self.toConnPoint = tcp
 
     def draw(self,shaderhandler,renderer,viewMat):
         shader = shaderhandler.getShader("bezier")
@@ -137,8 +187,8 @@ class BezierCurve:
                 shader.SetUniform1f(key,options[key])
 
         #mvp = np.transpose(np.matmul(viewMat,self.model.modelMat))     
-        shader.SetUniform3f("u_from",self.fromPos[0],self.fromPos[1],self.fromPos[2])
-        shader.SetUniform3f("u_to",self.toPos[0],self.toPos[1],self.toPos[2])   
+        shader.SetUniform3f("u_from",self.fromPos[0],-self.fromPos[1],self.fromPos[2])
+        shader.SetUniform3f("u_to",self.toPos[0],-self.toPos[1],self.toPos[2])   
         #shader.SetUniformMat4f("u_MVP", mvp)
         shader.SetUniformMat4f("u_VP", np.transpose(viewMat))
         shader.SetUniformMat4f("u_Model", np.transpose(self.model.modelMat))
@@ -146,6 +196,11 @@ class BezierCurve:
         renderer.Draw(self.model.va,self.model.ib,shader)
         #
         #self.model.DrawWithShader(shaderhandler.getShader("bezier"),renderer,viewMat)
+    def update(self,deltaTime,audioHandler):
+        if self.fromConnPoint != None:
+            self.fromPos = glm.vec3(self.fromConnPoint.model.pos)*50
+        if self.toConnPoint != None:
+            self.toPos = glm.vec3(self.toConnPoint.model.pos)*50
     
 
 
@@ -156,7 +211,7 @@ class Camera:
         """
         #self.pos = np.array([0,0,-1],dtype="float64")
         self.pos = glm.vec3(0,0,-2)
-        
+        self.savedPos = glm.vec3(0,0,-2)
         #self.rot = np.array([0,0,0])
         self.rot = glm.vec3(0,0,0)
         self.camModel = None

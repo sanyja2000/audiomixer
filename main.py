@@ -106,16 +106,21 @@ class Game:
 
         self.FPSCounter = FPSCounter()
 
+        self.drawingCurve = False
 
 
         self.table = Table("maps/empty.json")
 
-        self.tmpwg = WaveGenerator(self.table.prefabHandler, {"name":"32","pos":[0.5,0,0],"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/input_uvd.png"})
+        self.tmpwg = WaveGenerator(self.table.prefabHandler, "32","wavegen",[0.5,0,0])
+        self.table.objects.append(self.tmpwg)
 
+        self.table.objects.append(WaveGenerator(self.table.prefabHandler, "3342","wavegen",[-1,1,0]))
 
-        self.tmpcurve = BezierCurve(self.table.prefabHandler, {})
+        self.mouseCurve = BezierCurve(self.table.prefabHandler, None, None)
 
         self.camera = Camera()
+
+        self.grabbedNode = None
 
         glutMainLoop()
     def errorMsg(self, *args):
@@ -128,12 +133,62 @@ class Game:
         glViewport(0,0,self.windowSize[0],self.windowSize[1])
         self.inputHandler.changeWindowSize(self.windowSize)
     def mouseClicked(self,*args):
-        if args[1] == 1:
-            return
         output = self.inputHandler.screenToWorld(self.proj,self.camera,self.inputHandler.mouseX,self.inputHandler.mouseY)
         
-        #self.table.objects.append(Decoration(self.table.prefabHandler, {"name":"o"+str(len(self.table.objects)),"pos":[output[0],-output[1],0],"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/input_uvd.png"}))
-        
+
+        if args[1] == 1:
+            if args[0] == 0:
+                # Left click up
+                self.inputHandler.mouseLeftDown = False
+                self.grabbedNode = None
+                if self.drawingCurve:
+                    for i in self.table.objects:
+                        if hasattr(i, "checkIntersect"):
+                            intersectObj = i.checkIntersect(output.x,output.y)
+                            if intersectObj != None:
+                                if(type(intersectObj)==ConnectionPoint):
+                                    if intersectObj.side != self.mouseCurve.fromConnPoint.side:
+                                        if intersectObj.parent == self.mouseCurve.fromConnPoint.parent:
+                                            break
+                                        alreadyConnected = []
+                                        for bc in self.table.objects:
+                                            if type(bc)==BezierCurve:
+                                                if intersectObj == bc.fromConnPoint or intersectObj == bc.toConnPoint or self.mouseCurve.fromConnPoint == bc.fromConnPoint or self.mouseCurve.fromConnPoint == bc.toConnPoint:
+                                                    alreadyConnected.append(bc)
+                                        for bc in alreadyConnected:
+                                            self.table.objects.remove(bc)
+                                        
+                                        self.table.objects.append(BezierCurve(self.table.prefabHandler, self.mouseCurve.fromConnPoint,intersectObj))
+                                        break
+                self.drawingCurve = False
+                                        
+                                        
+            if args[0] == 2:
+                # Right click up
+                self.inputHandler.mouseRightDown = False
+        elif args[1] == 0:
+            if args[0] == 0:
+                # Left click down
+                self.inputHandler.mouseLeftDown = True
+                if self.drawingCurve:
+                    self.drawingCurve = False
+                    return
+
+                for i in self.table.objects:
+                    if hasattr(i, "checkIntersect"):
+                        intersectObj = i.checkIntersect(output.x,output.y)
+                        if intersectObj != None:
+                            if(type(intersectObj)==ConnectionPoint):
+                                self.drawingCurve = True
+                                self.mouseCurve.fromConnPoint = intersectObj
+                            else:
+                                self.grabbedNode = intersectObj
+                            break
+            if args[0] == 2:
+                # Right click down
+                self.inputHandler.mouseRightDown = True
+                self.camera.savedPos = glm.vec3(self.inputHandler.mouseX,self.inputHandler.mouseY,0)/200-self.camera.pos
+                pass
 
 
     def showScreen(self):
@@ -149,16 +204,13 @@ class Game:
 
         self.renderer.Clear()
 
-        if self.inputHandler.isKeyHeldDown(b'w'):
-            self.camera.pos += glm.vec3(0,1.0,0)*self.FPSCounter.deltaTime
-        elif self.inputHandler.isKeyHeldDown(b's'):
-            self.camera.pos += glm.vec3(0,-1.0,0)*self.FPSCounter.deltaTime
-        if self.inputHandler.isKeyHeldDown(b'a'):
-            self.camera.pos += glm.vec3(1,0.0,0)*self.FPSCounter.deltaTime
-        elif self.inputHandler.isKeyHeldDown(b'd'):
-            self.camera.pos += glm.vec3(-1,0.0,0)*self.FPSCounter.deltaTime
-        self.camera.update(0,0)
 
+        if self.inputHandler.mouseRightDown:
+            output = self.inputHandler.screenToWorld(self.proj,self.camera,self.inputHandler.mouseX,self.inputHandler.mouseY)
+            self.camera.pos = glm.vec3(self.inputHandler.mouseX,self.inputHandler.mouseY,0)/200 - self.camera.savedPos
+            self.camera.update(None,None)
+        
+        
         # camera
         viewMat = np.matmul(self.proj,self.camera.camModel)
 
@@ -166,20 +218,26 @@ class Game:
         popupText = ""
         
 
-        for i in []:#self.table.objects:
+        for i in self.table.objects:
             i.draw(self.shaderHandler,self.renderer,viewMat)
             if hasattr(i, "update"):
                 i.update(self.FPSCounter.deltaTime,self.audioHandler)
+            
 
-        self.tmpwg.draw(self.shaderHandler,self.renderer,viewMat)
-        self.tmpwg.update(self.FPSCounter.deltaTime,self.audioHandler)
+        #self.tmpwg.draw(self.shaderHandler,self.renderer,viewMat)
+        #self.tmpwg.update(self.FPSCounter.deltaTime,self.audioHandler)
 
         output = self.inputHandler.screenToWorld(self.proj,self.camera,self.inputHandler.mouseX,self.inputHandler.mouseY)
-        self.tmpcurve.toPos = glm.vec3(output.x, output.y, 0)*51
+
+        if self.grabbedNode != None:
+            self.grabbedNode.model.SetPosition(glm.vec3(output.x,output.y,0))
+
+        if self.drawingCurve:
+            self.mouseCurve.toPos = glm.vec3(output.x, output.y, 0)*50
+            self.mouseCurve.update(self.FPSCounter.deltaTime,self.audioHandler)
+            self.mouseCurve.draw(self.shaderHandler,self.renderer,viewMat)
         
-        self.tmpcurve.draw(self.shaderHandler,self.renderer,viewMat)
-        
-        self.fontHandler.drawText(popupText,-1*len(popupText)/50,-0.6,0.05,self.renderer)
+        self.fontHandler.drawText("",-1*len(popupText)/50,-0.6,0.05,self.renderer)
 
         # Draw in game menu
         glutSwapBuffers()

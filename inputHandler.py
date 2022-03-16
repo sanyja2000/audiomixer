@@ -12,6 +12,8 @@ class InputHandler:
         """
         self.mouseX = 0
         self.mouseY = 0
+        self.mouseLeftDown = False
+        self.mouseRightDown = False
         self.mouseXNorm = 0
         self.mouseYNorm = 0        
         self.mouseLocked = False
@@ -33,7 +35,8 @@ class InputHandler:
         self.mouseYNorm = -self.mouseY*2/self.windowSize[1]+1
     def screenToWorld(self,proj,camera,x,y):
         output = glm.unProject(glm.vec3(x,y,1.0), camera.camModel, proj, glm.vec4(0,0,self.windowSize[0],self.windowSize[1]))
-        return output/5+glm.vec3(camera.pos.x*0.8,-camera.pos.y*1.2,0.0)
+        output.y*=-1
+        return output/5+glm.vec3(camera.pos.x*0.8,camera.pos.y*1.2,0.0)
     def activeMouseEventHandler(self,*args):
         pass
     def keyDownHandler(self, *args):
