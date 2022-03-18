@@ -45,9 +45,9 @@ class AudioHandler:
             if self.dataReady:
                 stream.write(self.dataPlaying)
                 #data = wf.readframes(1024)
-                #self.dataReady = False
+                self.dataReady = False
             else:
-                time.sleep(0.1)
+                time.sleep(0.001)
         stream.stop_stream()
         stream.close()
         

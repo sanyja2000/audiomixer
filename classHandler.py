@@ -78,7 +78,7 @@ class Decoration:
             self.shaderName = "default_transparent"
     def draw(self,shaderhandler,renderer,viewMat):
         self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
-    def update(self,deltaTime,audioHandler):
+    def update(self,fpsCounter,audioHandler):
         pass
         #self.model.SetRotation(np.array([self.model.rot[0],self.rot,self.model.rot[2]]))
 
@@ -97,7 +97,7 @@ class NodeElement:
         self.shaderName = "default"
     def draw(self,shaderhandler,renderer,viewMat):
         self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
-    def update(self,deltaTime,audioHandler):
+    def update(self,fpsCounter,audioHandler):
         pass
 
 class ConnectionPoint:
@@ -112,6 +112,8 @@ class ConnectionPoint:
         self.model.SetRotation(np.array([1.57,0,0]))
         self.positionOffset = posoffset
         self.shaderName = "default"
+        self.bezier = None
+        self.data = None
     def draw(self,shaderhandler,renderer,viewMat):
         self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
     def checkIntersect(self,x,y):
@@ -121,13 +123,18 @@ class ConnectionPoint:
     def updatePos(self,pos):
         self.model.SetPosition(pos+self.positionOffset)
 
-class WaveGenerator(NodeElement):
-    def __init__(self,ph,name, type, pos):
+class SineGenerator(NodeElement):
+    def __init__(self,ph,name, pos):
         """Inputs: freq,amp. Output: wave signal"""
         
-        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/input_uvd.png"})
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/sinewave.png"})
         self.inputs = {"amp":0,"freq":4}
         self.outputs = {"signal":0}
+        self.lastSentTime = 0
+        self.processedFrames = 0
+        self.deffreq = 880
+        self.defamp = 1
+        self.freq = self.deffreq
         self.connpoints = []
         for ind in range(len(self.outputs)):
             self.connpoints.append(ConnectionPoint(ph,self,list(self.outputs)[ind],"out",pos,glm.vec3([-0.55,-0.1*ind,0])))
@@ -149,9 +156,70 @@ class WaveGenerator(NodeElement):
             cp.draw(shaderhandler,renderer,viewMat)
 
 
-    def update(self,deltaTime,audioHandler):
+    def update(self,fpsCounter,audioHandler):
         for cp in self.connpoints:
             cp.updatePos(self.model.pos)
+            if cp.name == "freq":
+                if cp.bezier is None or cp.data is None:
+                    self.freq = self.deffreq
+                else:
+                    self.freq = np.abs(cp.data[0])
+            if cp.name == "signal" and cp.bezier != None:
+                if not audioHandler.dataReady:#fpsCounter.currentTime-self.lastSentTime>2048/44100:
+                    mult = self.freq/(44100/3.1415)
+                    cp.data = np.sin((np.arange(2048)+self.processedFrames)*mult)*1000
+                    self.lastSentTime = fpsCounter.currentTime
+                    self.processedFrames += 2048
+        
+
+
+class SquareGenerator(NodeElement):
+    def __init__(self,ph,name, pos):
+        """Inputs: freq,amp. Output: wave signal"""
+        
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/squarewave.png"})
+        self.inputs = {"amp":0,"freq":4}
+        self.outputs = {"signal":0}
+        self.lastSentTime = 0
+        self.processedFrames = 0
+        self.deffreq = 880
+        self.defamp = 1
+        self.freq = self.deffreq
+        self.connpoints = []
+        for ind in range(len(self.inputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,list(self.inputs)[ind],"in",pos,glm.vec3([0.55,-0.1*ind,0])))  
+        for ind in range(len(self.outputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,list(self.outputs)[ind],"out",pos,glm.vec3([-0.55,-0.1*ind,0])))
+        
+    def checkIntersect(self,x,y):
+        for cp in self.connpoints:
+            if cp.checkIntersect(x,y):
+                return cp
+        if self.model.pos[0]-self.model.scale*1 <x<self.model.pos[0]+self.model.scale*1:
+            if self.model.pos[1]-self.model.scale*1 <y<self.model.pos[1]+self.model.scale*1:
+                return self
+        return None
+
+    def draw(self,shaderhandler,renderer,viewMat):
+        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
+        for cp in self.connpoints:
+            cp.draw(shaderhandler,renderer,viewMat)
+
+
+    def update(self,fpsCounter,audioHandler):
+        for cp in self.connpoints:
+            cp.updatePos(self.model.pos)
+            if cp.name == "freq":
+                if cp.bezier is None or cp.data is None:
+                    self.freq = self.deffreq
+                else:
+                    self.freq = np.abs(cp.data[0])
+            if cp.name == "signal" and cp.bezier != None:
+                if not audioHandler.dataReady:#fpsCounter.currentTime-self.lastSentTime>2048/44100:
+                    mult = self.freq/(44100/3.1415)
+                    cp.data = np.sign(np.sin((np.arange(2048)+self.processedFrames)*mult))*1000
+                    self.lastSentTime = fpsCounter.currentTime
+                    self.processedFrames += 2048
         
 
 
@@ -162,7 +230,9 @@ class SpeakerOut(NodeElement):
         NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/speaker.png"})
         self.inputs = {"signal":0}
         self.connpoints = []
-        self.time = 0
+        self.lastSentTime = 0
+        self.sampleRate = 44100
+
         self.outputSample = np.array([],dtype=np.int16)
         for ind in range(len(self.inputs)):
             self.connpoints.append(ConnectionPoint(ph,self,list(self.inputs)[ind],"in",pos,glm.vec3([0.55,-0.1*ind,0])))
@@ -182,17 +252,21 @@ class SpeakerOut(NodeElement):
             cp.draw(shaderhandler,renderer,viewMat)
 
 
-    def update(self,deltaTime,audioHandler):
-        self.time += deltaTime
+    def update(self,fpsCounter,audioHandler):
         for cp in self.connpoints:
             cp.updatePos(self.model.pos)
-        self.outputSample=np.append(self.outputSample, np.sin(self.time))
-        if len(self.outputSample)>=500:
-            print(self.outputSample)
-            audioHandler.dataPlaying = self.outputSample
-            audioHandler.dataReady = False
-            self.outputSample = np.array([],dtype=np.int16)
+        if not audioHandler.dataReady:
+            if self.connpoints[0].data is not None:
+                audioHandler.dataPlaying = self.connpoints[0].data.astype(np.int16).tobytes()
+                audioHandler.dataReady = True
+                self.lastSentTime = fpsCounter.currentTime
+                self.connpoints[0].data = None
 
+
+        
+
+        
+        
 
 class BezierCurve:
     def __init__(self,ph,fcp,tcp):
@@ -213,16 +287,6 @@ class BezierCurve:
         shader.Bind()
         self.model.texture.Bind()
         shader.SetUniform1i("u_Texture",0)
-        for key in []:
-            options = ""
-            val = key.split(",")
-            if len(val)>1 and val[0] == "3fv":
-                shader.SetUniform3fv(val[1],options[key])
-            elif len(val)>1 and val[0] == "4fv":
-                shader.SetUniform4fv(val[1],options[key])
-            else:
-                shader.SetUniform1f(key,options[key])
-
         #mvp = np.transpose(np.matmul(viewMat,self.model.modelMat))     
         shader.SetUniform3f("u_from",self.fromPos[0],-self.fromPos[1],self.fromPos[2])
         shader.SetUniform3f("u_to",self.toPos[0],-self.toPos[1],self.toPos[2])   
@@ -233,11 +297,13 @@ class BezierCurve:
         renderer.Draw(self.model.va,self.model.ib,shader)
         #
         #self.model.DrawWithShader(shaderhandler.getShader("bezier"),renderer,viewMat)
-    def update(self,deltaTime,audioHandler):
+    def update(self,fpsCounter,audioHandler):
         if self.fromConnPoint != None:
             self.fromPos = glm.vec3(self.fromConnPoint.model.pos)*50
         if self.toConnPoint != None:
             self.toPos = glm.vec3(self.toConnPoint.model.pos)*50
+        if self.toConnPoint != None and self.fromConnPoint != None:
+            self.toConnPoint.data = self.fromConnPoint.data
     
 
 
@@ -256,7 +322,7 @@ class Camera:
         self.update(0,0)
     def draw(self,shaderhandler,renderer,viewMat):
         pass
-    def update(self,deltaTime,audioHandler):
+    def update(self,fpsCounter,audioHandler):
         """
         rotz = pyrr.matrix44.create_from_z_rotation(self.rot[2])
         rotx = pyrr.matrix44.create_from_x_rotation(self.rot[0])

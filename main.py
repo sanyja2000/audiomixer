@@ -111,8 +111,12 @@ class Game:
 
         self.table = Table("maps/empty.json")
 
-        self.tmpwg = WaveGenerator(self.table.prefabHandler, "32","sine",[0.5,0,0])
+        #self.tmpwg = SineGenerator(self.table.prefabHandler, "32",[0.5,0,0])
+        self.tmpwg = SquareGenerator(self.table.prefabHandler, "32",[0.5,0,0])
+        
         self.table.objects.append(self.tmpwg)
+
+        self.table.objects.append(SineGenerator(self.table.prefabHandler, "322",[0.5,-1,0]))
 
         self.table.objects.append(SpeakerOut(self.table.prefabHandler, "3342",[-1,1,0]))
 
@@ -158,9 +162,18 @@ class Game:
                                                 if intersectObj == bc.fromConnPoint or intersectObj == bc.toConnPoint or self.mouseCurve.fromConnPoint == bc.fromConnPoint or self.mouseCurve.fromConnPoint == bc.toConnPoint:
                                                     alreadyConnected.append(bc)
                                         for bc in alreadyConnected:
+                                            bc.fromConnPoint.bezier = None
+                                            bc.toConnPoint.bezier = None
                                             self.table.objects.remove(bc)
-                                        
-                                        self.table.objects.append(BezierCurve(self.table.prefabHandler, self.mouseCurve.fromConnPoint,intersectObj))
+                                        fromPoint = self.mouseCurve.fromConnPoint
+                                        toPoint = intersectObj
+                                        if intersectObj.side == "out":
+                                            fromPoint = intersectObj
+                                            toPoint = self.mouseCurve.fromConnPoint
+                                        newbc = BezierCurve(self.table.prefabHandler, fromPoint,toPoint)
+                                        self.table.objects.append(newbc)
+                                        intersectObj.bezier = newbc
+                                        self.mouseCurve.fromConnPoint.bezier = newbc
                                         break
                 self.drawingCurve = False
                                         
@@ -220,7 +233,7 @@ class Game:
         for i in self.table.objects:
             i.draw(self.shaderHandler,self.renderer,viewMat)
             if hasattr(i, "update"):
-                i.update(self.FPSCounter.deltaTime,self.audioHandler)
+                i.update(self.FPSCounter,self.audioHandler)
             
 
         #self.tmpwg.draw(self.shaderHandler,self.renderer,viewMat)
@@ -233,7 +246,7 @@ class Game:
 
         if self.drawingCurve:
             self.mouseCurve.toPos = glm.vec3(output.x, output.y, 0)*50
-            self.mouseCurve.update(self.FPSCounter.deltaTime,self.audioHandler)
+            self.mouseCurve.update(self.FPSCounter,self.audioHandler)
             self.mouseCurve.draw(self.shaderHandler,self.renderer,viewMat)
         
         self.fontHandler.drawText("",-1*len(popupText)/50,-0.6,0.05,self.renderer)

@@ -197,6 +197,7 @@ class FPSCounter:
         self.fpsCounter = []
         self.deltaTime = 0
         self.FPS = 0
+        self.currentTime = 0
     def drawFrame(self, now):
         for x in range(len(self.fpsCounter)-1,0,-1):
             if self.fpsCounter[x]<now-1:
@@ -205,6 +206,7 @@ class FPSCounter:
             self.deltaTime = now-self.fpsCounter[-1]
         self.fpsCounter.append(now)
         self.FPS = len(self.fpsCounter)
+        self.currentTime = now
 
 class ShaderHandler:
     def __init__(self):
