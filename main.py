@@ -116,7 +116,10 @@ class Game:
         
         self.table.objects.append(self.tmpwg)
 
-        self.table.objects.append(SineGenerator(self.table.prefabHandler, "322",[0.5,-1,0]))
+        self.table.objects.append(SineGenerator(self.table.prefabHandler, "2314",[1.5,-1,0]))
+
+
+        self.table.objects.append(FilePlayer(self.table.prefabHandler, "322",[0.5,-1,0]))
 
         self.table.objects.append(SpeakerOut(self.table.prefabHandler, "3342",[-1,1,0]))
 

@@ -40,14 +40,14 @@ class AudioHandler:
         th.start()
 
     def speakerOutPlayBlock(self,wf,stream):
-        #data = wf.readframes(1024)
+        #self.dataPlaying = wf.readframes(1024)
         while not self.exit:
             if self.dataReady:
                 stream.write(self.dataPlaying)
-                #data = wf.readframes(1024)
+                #self.dataPlaying = wf.readframes(1024)
                 self.dataReady = False
             else:
-                time.sleep(0.001)
+                time.sleep(0.0001)
         stream.stop_stream()
         stream.close()
         
