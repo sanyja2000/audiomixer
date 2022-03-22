@@ -19,6 +19,7 @@ Classes are required to have a draw function and optionally an update and moveWi
 
 """
 
+SAMPLESIZE = 2048 # Must be even, choose higher for better performance
 
 
 def easeInOutSine(x):
@@ -108,7 +109,7 @@ class ConnectionPoint:
         self.side = side
         self.name = name
         self.parent = parent
-        self.model = ph.loadFile("res/torus.obj","res/crystal.png")
+        self.model = ph.loadFile("res/torus.obj","res/cptexture.png")
         self.model.SetScale(0.03)
         self.model.SetPosition(glm.vec3(pos)+glm.vec3(posoffset))
         self.model.SetRotation(np.array([1.57,0,0]))
@@ -127,14 +128,14 @@ class ConnectionPoint:
 
 class SineGenerator(NodeElement):
     def __init__(self,ph,name, pos):
-        """Inputs: freq,amp. Output: wave signal"""
+        """Inputs: amp. Output: sinewave signal"""
         
         NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/sinewave.png"})
         self.inputs = ["amp","freq"]
         self.outputs = ["signal"]
         self.lastSent = 0
         self.processedFrames = 0
-        self.deffreq = 880
+        self.deffreq = 440
         self.defamp = 1
         self.freq = self.deffreq
         self.connpoints = []
@@ -161,6 +162,8 @@ class SineGenerator(NodeElement):
     def update(self,fpsCounter,audioHandler):
         for cp in self.connpoints:
             cp.updatePos(self.model.pos)
+    def audioUpdate(self,fpsCounter,audioHandler):
+        for cp in self.connpoints:
             if cp.name == "freq":
                 if cp.bezier is None or cp.data is None:
                     self.freq = self.deffreq
@@ -170,21 +173,21 @@ class SineGenerator(NodeElement):
                 cur = fpsCounter.currentTime
                 if not audioHandler.dataReady  and cur-self.lastSent>fpsCounter.deltaTime:
                     mult = self.freq/(44100/3.1415)
-                    cp.data = np.sin((np.arange(2048)+self.processedFrames)*mult)*1000
+                    cp.data = np.sin((np.arange(SAMPLESIZE)+self.processedFrames)*mult)*1000
                     self.lastSent = cur
-                    self.processedFrames += 2048
+                    self.processedFrames += SAMPLESIZE
         
 
 
 class SquareGenerator(NodeElement):
     def __init__(self,ph,name, pos):
-        """Inputs: freq,amp. Output: wave signal"""
+        """Inputs: freq. Output: squarewave signal"""
         
         NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/squarewave.png"})
         self.inputs = {"amp":0,"freq":4}
         self.outputs = {"signal":0}
         self.processedFrames = 0
-        self.deffreq = 880
+        self.deffreq = 440
         self.defamp = 1
         self.freq = self.deffreq
         self.lastSent = 0
@@ -212,6 +215,8 @@ class SquareGenerator(NodeElement):
     def update(self,fpsCounter,audioHandler):
         for cp in self.connpoints:
             cp.updatePos(self.model.pos)
+    def audioUpdate(self,fpsCounter,audioHandler):
+        for cp in self.connpoints:
             if cp.name == "freq":
                 if cp.bezier is None or cp.data is None:
                     self.freq = self.deffreq
@@ -219,23 +224,23 @@ class SquareGenerator(NodeElement):
                     self.freq = np.abs(cp.data[0])
             if cp.name == "signal" and cp.bezier != None:
                 cur = fpsCounter.currentTime
-                if not audioHandler.dataReady and cur-self.lastSent>fpsCounter.deltaTime:#fpsCounter.currentTime-self.lastSentTime>2048/44100:
+                if not audioHandler.dataReady and cur-self.lastSent>fpsCounter.deltaTime:
                     mult = self.freq/(44100/3.1415)
-                    cp.data = np.sign(np.sin((np.arange(2048)+self.processedFrames)*mult))*1000
+                    cp.data = np.sign(np.sin((np.arange(SAMPLESIZE)+self.processedFrames)*mult))*1000
                     self.lastSent = cur
-                    self.processedFrames += 2048
+                    self.processedFrames += SAMPLESIZE
         
 
 
 class FilePlayer(NodeElement):
     def __init__(self,ph,name, pos):
-        """Inputs: freq,amp. Output: wave signal"""
+        """Inputs: None. Output: file signal"""
         
         NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/inputfile.png"})
         self.inputs = []
         self.outputs = ["signal"]
         self.lastSent = 0
-        self.wf = wave.open('audiotest/feel_cut.wav', 'rb')
+        self.wf = wave.open(name, 'rb')
         self.connpoints = []
         for ind in range(len(self.inputs)):
             self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.55,-0.1*ind,0])))  
@@ -260,18 +265,124 @@ class FilePlayer(NodeElement):
     def update(self,fpsCounter,audioHandler):
         for cp in self.connpoints:
             cp.updatePos(self.model.pos)
+    
+    def audioUpdate(self,fpsCounter,audioHandler):
         outsig = self.connpoints[0]
         if outsig.bezier != None:
             cur = fpsCounter.currentTime 
-            if not audioHandler.dataReady and cur-self.lastSent>fpsCounter.deltaTime:#fpsCounter.currentTime-self.lastSentTime>2048/44100:
-                outsig.data = self.wf.readframes(1024)
+            if not audioHandler.dataReady and cur-self.lastSent>fpsCounter.deltaTime:
+                outsig.data = self.wf.readframes(SAMPLESIZE//2)
                 self.lastSent = cur
-                if len(outsig.data)<1024:
+                if len(outsig.data)<2048:
                     self.wf.setpos(0)
-                    outsig.data = self.wf.readframes(1024)
+                    outsig.data = self.wf.readframes(SAMPLESIZE//2)
                 outsig.data = np.frombuffer(outsig.data, dtype=np.int16)
+
+class ConstantNode(NodeElement):
+    def __init__(self,ph,name, pos):
+        """Inputs: None. Output: constant*np.ones(n)"""
+        
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/constantnode.png"})
+        self.inputs = []
+        self.outputs = ["signal"]
+        self.lastSent = 0
+        self.connpoints = []
+        self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*880
+        for ind in range(len(self.inputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.55,-0.1*ind,0])))  
+        for ind in range(len(self.outputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.55,-0.1*ind,0])))
+        
+    def checkIntersect(self,x,y):
+        for cp in self.connpoints:
+            if cp.checkIntersect(x,y):
+                return cp
+        if self.model.pos[0]-self.model.scale*1 <x<self.model.pos[0]+self.model.scale*1:
+            if self.model.pos[1]-self.model.scale*1 <y<self.model.pos[1]+self.model.scale*1:
+                return self
+        return None
+
+    def draw(self,shaderhandler,renderer,viewMat):
+        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
+        for cp in self.connpoints:
+            cp.draw(shaderhandler,renderer,viewMat)
+
+
+    def update(self,fpsCounter,audioHandler):
+        for cp in self.connpoints:
+            cp.updatePos(self.model.pos)
+    def audioUpdate(self,fpsCounter,audioHandler):
+        outsig = self.connpoints[0]
+        if outsig.bezier != None:
+            outsig.data = np.frombuffer(self.outputData, dtype=np.int16)
         
 
+class AddNode(NodeElement):
+    def __init__(self,ph,name, pos):
+        """Inputs: A,B. Output: A+B"""
+        
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/constantnode.png"})
+        self.inputs = ["A","B"]
+        self.outputs = ["signal"]
+        self.lastSent = 0
+        self.connpoints = []
+        self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*880
+        for ind in range(len(self.inputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.55,-0.1*ind,0])))  
+        for ind in range(len(self.outputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.55,-0.1*ind,0])))
+        
+        self.aconn = self.connpoints[0]
+        self.bconn = self.connpoints[1]
+        
+    def checkIntersect(self,x,y):
+        for cp in self.connpoints:
+            if cp.checkIntersect(x,y):
+                return cp
+        if self.model.pos[0]-self.model.scale*1 <x<self.model.pos[0]+self.model.scale*1:
+            if self.model.pos[1]-self.model.scale*1 <y<self.model.pos[1]+self.model.scale*1:
+                return self
+        return None
+
+    def draw(self,shaderhandler,renderer,viewMat):
+        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
+        for cp in self.connpoints:
+            cp.draw(shaderhandler,renderer,viewMat)
+
+
+    def update(self,fpsCounter,audioHandler):
+        for cp in self.connpoints:
+            cp.updatePos(self.model.pos)
+    
+    def audioUpdate(self,fpsCounter,audioHandler):
+        outsig = self.connpoints[2]
+        outsig.data = np.ones(SAMPLESIZE, dtype=np.int16)
+        if self.aconn.data is not None:
+            np.add(outsig.data, self.aconn.data//2, out=outsig.data, casting="unsafe")
+            #outsig.data = np.maximum(self.aconn.data, outsig.data)
+        if self.bconn.data is not None:
+            np.add(outsig.data, self.bconn.data//2, out=outsig.data, casting="unsafe")
+            #outsig.data = np.maximum(self.bconn.data, outsig.data)
+        """
+        if outsig.bezier != None:
+            cur = fpsCounter.currentTime
+            
+            
+            if not audioHandler.dataReady and cur-self.lastSent>fpsCounter.deltaTime:
+                outsig.data = np.zeros(SAMPLESIZE, dtype=np.int16)
+                if self.aconn.data is not None:
+                    np.add(outsig.data, self.aconn.data, out=outsig.data, casting="unsafe")
+                    if self.aconn.bezier is not None:
+                        self.aconn.bezier.fromConnPoint.data = None
+                    #outsig.data += self.aconn.data//2
+                if self.bconn.data is not None:
+                    np.add(outsig.data, self.bconn.data, out=outsig.data, casting="unsafe")
+                    if self.bconn.bezier is not None:
+                        self.bconn.bezier.fromConnPoint.data = None
+                    #outsig.data += self.bconn.data//2
+                self.lastSent = cur
+        """
+                
 
 
 
@@ -283,7 +394,6 @@ class SpeakerOut(NodeElement):
         self.inputs = ["signal"]
         self.connpoints = []
         self.lastSentTime = 0
-        self.sampleRate = 44100
 
         self.outputSample = np.array([],dtype=np.int16)
         for ind in range(len(self.inputs)):
@@ -310,14 +420,11 @@ class SpeakerOut(NodeElement):
         
         if not audioHandler.dataReady:
 
-            #audioHandler.dataPlaying = np.frombuffer(self.wf.readframes(1024), dtype=np.int16)
-            #audioHandler.dataPlaying = self.wf.readframes(1024)
-            
-            #audioHandler.dataReady = True
             if not self.connpoints[0].data is None:
                 audioHandler.dataPlaying = self.connpoints[0].data.astype(np.int16).tobytes()
                 audioHandler.dataReady = True
-                self.connpoints[0].bezier.fromConnPoint.data = None
+                if self.connpoints[0].bezier is not None:
+                    self.connpoints[0].bezier.fromConnPoint.data = None
 
 
 

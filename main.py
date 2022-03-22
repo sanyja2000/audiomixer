@@ -71,7 +71,8 @@ class Game:
 
         print(glGetString(GL_SHADING_LANGUAGE_VERSION))
 
-        glClearColor(0.52,0.80,0.92,1.0)
+        #glClearColor(0.52,0.80,0.92,1.0)
+        glClearColor(0.039,0.5,0.4,1.0)
 
         self.shaderHandler = ShaderHandler()
         
@@ -112,16 +113,20 @@ class Game:
         self.table = Table("maps/empty.json")
 
         #self.tmpwg = SineGenerator(self.table.prefabHandler, "32",[0.5,0,0])
-        self.tmpwg = SquareGenerator(self.table.prefabHandler, "32",[0.5,0,0])
+        self.tmpwg = SquareGenerator(self.table.prefabHandler, "32",[1,0.7,0])
         
         self.table.objects.append(self.tmpwg)
 
-        self.table.objects.append(SineGenerator(self.table.prefabHandler, "2314",[1.5,-1,0]))
+        self.table.objects.append(AddNode(self.table.prefabHandler, "2314",[-1,-0.7,0]))
 
 
-        self.table.objects.append(FilePlayer(self.table.prefabHandler, "322",[0.5,-1,0]))
+        self.table.objects.append(FilePlayer(self.table.prefabHandler, "audiotest/Cartoon_On&On.wav",[2,-0.7,0]))
+        self.table.objects.append(FilePlayer(self.table.prefabHandler, "audiotest/LostSky_Fearless.wav",[1,-0.7,0]))
 
-        self.table.objects.append(SpeakerOut(self.table.prefabHandler, "3342",[-1,1,0]))
+        self.table.objects.append(ConstantNode(self.table.prefabHandler, "33322",[-1,1.4,0]))
+
+        self.speakerOut = SpeakerOut(self.table.prefabHandler, "3342",[-1,0.7,0])
+
 
         self.audioHandler.speakerStart()
         #self.audioHandler.playSound("res/audio/feel_cut.wav")
@@ -130,6 +135,10 @@ class Game:
         self.camera = Camera()
 
         self.grabbedNode = None
+
+        self.sortedNodes = []
+
+        self.rearrangeNodes()
 
         glutMainLoop()
     def errorMsg(self, *args):
@@ -141,6 +150,23 @@ class Game:
         self.proj = glm.perspective(45.0, self.windowSize[0]/self.windowSize[1], 1.0, 10.0)
         glViewport(0,0,self.windowSize[0],self.windowSize[1])
         self.inputHandler.changeWindowSize(self.windowSize)
+    def addNodeRecursive(self, node):
+        self.sortedNodes.append(node)
+        for cp in node.connpoints:
+            if cp.side == "in":
+                if cp.bezier is not None:
+                    self.addNodeRecursive(cp.bezier.fromConnPoint.parent)
+    def rearrangeNodes(self):
+        self.sortedNodes = []
+        if self.speakerOut.connpoints[0].bezier is not None:
+            curnode = self.speakerOut.connpoints[0].bezier.fromConnPoint.parent
+            self.addNodeRecursive(curnode)
+        self.sortedNodes = self.sortedNodes[::-1]
+        """
+        for i in self.table.objects:
+            if i not in self.sortedNodes:
+                self.sortedNodes.append(i)
+        """
     def mouseClicked(self,*args):
         output = self.inputHandler.screenToWorld(self.proj,self.camera,self.inputHandler.mouseX,self.inputHandler.mouseY)
         
@@ -151,7 +177,7 @@ class Game:
                 self.inputHandler.mouseLeftDown = False
                 self.grabbedNode = None
                 if self.drawingCurve:
-                    for i in self.table.objects:
+                    for i in self.table.objects+[self.speakerOut]:
                         if hasattr(i, "checkIntersect"):
                             intersectObj = i.checkIntersect(output.x,output.y)
                             if intersectObj != None:
@@ -160,7 +186,7 @@ class Game:
                                         if intersectObj.parent == self.mouseCurve.fromConnPoint.parent:
                                             break
                                         alreadyConnected = []
-                                        for bc in self.table.objects:
+                                        for bc in self.table.objects+[self.speakerOut]:
                                             if type(bc)==BezierCurve:
                                                 if intersectObj == bc.fromConnPoint or intersectObj == bc.toConnPoint or self.mouseCurve.fromConnPoint == bc.fromConnPoint or self.mouseCurve.fromConnPoint == bc.toConnPoint:
                                                     alreadyConnected.append(bc)
@@ -177,9 +203,9 @@ class Game:
                                         self.table.objects.append(newbc)
                                         intersectObj.bezier = newbc
                                         self.mouseCurve.fromConnPoint.bezier = newbc
+                                        self.rearrangeNodes()
                                         break
-                self.drawingCurve = False
-                                        
+                self.drawingCurve = False             
                                         
             if args[0] == 2:
                 # Right click up
@@ -237,8 +263,14 @@ class Game:
             i.draw(self.shaderHandler,self.renderer,viewMat)
             if hasattr(i, "update"):
                 i.update(self.FPSCounter,self.audioHandler)
-            
 
+
+        for i in self.sortedNodes:
+            if hasattr(i, "audioUpdate") and not self.audioHandler.dataReady:
+                i.audioUpdate(self.FPSCounter,self.audioHandler)
+            
+        self.speakerOut.draw(self.shaderHandler,self.renderer,viewMat)
+        self.speakerOut.update(self.FPSCounter,self.audioHandler)
         #self.tmpwg.draw(self.shaderHandler,self.renderer,viewMat)
         #self.tmpwg.update(self.FPSCounter.deltaTime,self.audioHandler)
 

@@ -28,7 +28,7 @@ class AudioHandler:
         return False
 
     def speakerStart(self):
-        wf = wave.open("res/audio/feel_cut.wav", 'rb')
+        wf = wave.open("audiotest/feel_full.wav", 'rb')
         stream = self.p.open(format=self.p.get_format_from_width(wf.getsampwidth()),
                         channels=wf.getnchannels(),
                         rate=wf.getframerate(),
