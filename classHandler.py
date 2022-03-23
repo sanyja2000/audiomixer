@@ -2,6 +2,8 @@ from email.mime import audio
 import math
 from turtle import position
 from typing import Text
+
+from cv2 import multiply
 from engine.objectHandler import Object3D
 from engine.renderer import IndexBuffer, Shader, Texture, VertexArray, VertexBuffer, VertexBufferLayout
 import numpy as np
@@ -282,16 +284,16 @@ class ConstantNode(NodeElement):
     def __init__(self,ph,name, pos):
         """Inputs: None. Output: constant*np.ones(n)"""
         
-        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/constantnode.png"})
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/constantnode.png"})
         self.inputs = []
         self.outputs = ["signal"]
         self.lastSent = 0
         self.connpoints = []
-        self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*880
+        self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*80
         for ind in range(len(self.inputs)):
-            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.55,-0.1*ind,0])))  
+            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.1*ind,0])))  
         for ind in range(len(self.outputs)):
-            self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.55,-0.1*ind,0])))
+            self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.34,-0.1*ind-0.2,0])))
         
     def checkIntersect(self,x,y):
         for cp in self.connpoints:
@@ -317,23 +319,24 @@ class ConstantNode(NodeElement):
             outsig.data = np.frombuffer(self.outputData, dtype=np.int16)
         
 
-class AddNode(NodeElement):
+class MixerNode(NodeElement):
     def __init__(self,ph,name, pos):
         """Inputs: A,B. Output: A+B"""
         
-        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/constantnode.png"})
-        self.inputs = ["A","B"]
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/mixernode.png"})
+        self.inputs = ["A","B","mix"]
         self.outputs = ["signal"]
         self.lastSent = 0
         self.connpoints = []
         self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*880
         for ind in range(len(self.inputs)):
-            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.55,-0.1*ind,0])))  
+            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.14*ind+0.13,0])))  
         for ind in range(len(self.outputs)):
-            self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.55,-0.1*ind,0])))
+            self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.35,-0.1*ind,0])))
         
         self.aconn = self.connpoints[0]
         self.bconn = self.connpoints[1]
+        self.mixconn = self.connpoints[2]
         
     def checkIntersect(self,x,y):
         for cp in self.connpoints:
@@ -355,14 +358,21 @@ class AddNode(NodeElement):
             cp.updatePos(self.model.pos)
     
     def audioUpdate(self,fpsCounter,audioHandler):
-        outsig = self.connpoints[2]
+        outsig = self.connpoints[3]
         outsig.data = np.ones(SAMPLESIZE, dtype=np.int16)
+        multiplier = 0.5
+        if self.mixconn.data is not None:
+            multiplier = self.mixconn.data[0]/100
+            self.mixconn.data = None
         if self.aconn.data is not None:
-            np.add(outsig.data, self.aconn.data//2, out=outsig.data, casting="unsafe")
+            np.add(outsig.data, self.aconn.data*(1-multiplier), out=outsig.data, casting="unsafe")
+            self.aconn.data = None
             #outsig.data = np.maximum(self.aconn.data, outsig.data)
         if self.bconn.data is not None:
-            np.add(outsig.data, self.bconn.data//2, out=outsig.data, casting="unsafe")
+            np.add(outsig.data, self.bconn.data*multiplier, out=outsig.data, casting="unsafe")
+            self.bconn.data = None
             #outsig.data = np.maximum(self.bconn.data, outsig.data)
+        
         """
         if outsig.bezier != None:
             cur = fpsCounter.currentTime

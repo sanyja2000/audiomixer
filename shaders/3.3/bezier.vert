@@ -20,8 +20,6 @@ void main()
     float curveLength = distance(u_to, u_from);
 
     vec3 cp1 = vec3(u_to.x-0.7*(u_to.x-u_from.x),u_from.y,0);
-
-
     //vec3 cp1 = vec3(u_to.x+0.5*(curveLength)*sign(u_to.x-u_from.x),u_from.y,0);
     
     //cp1 = cp1.zyx;

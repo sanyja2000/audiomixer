@@ -20,8 +20,8 @@ class FontHandler:
                            "P":48,"Q":49,"R":50,"S":51,"T":52,"U":53,"V":54,"W":55,"X":56,"Y":57,"Z":58,"[":59,"\\":60,"]":61,"^":62,"_":63,
                            "`":64,"a":65,"b":66,"c":67,"d":68,"e":69,"f":70,"g":71,"h":72,"i":73,"j":74,"k":75,"l":76,"m":77,"n":78,"o":79,
                            "p":80,"q":81,"r":82,"s":83,"t":84,"u":85,"v":86,"w":87,"x":88,"y":89,"z":90,"{":91,"|":92,"}":93,"~":94," ":95,
-                           "¤":96,"ü":97,"é":98,"¤":99,"¤":100,"á":101,"¤":102,"¤":103,"¤":104,"¤":105,"é":106,"¤":107,"¤":108,"í":109,"Á":110,"¤":111,
-                           "¤":112,"¤":113,"¤":114,"ő":115,"ö":116,"ó":117,"ű":118,"ú":119,"¤":120,"Ö":121,"Ü":122,"¤":123,"£":124,"¤":125,"×":126,"¤":127}
+                           " ":96," ":97," ":98," ":99," ":100," ":101," ":102," ":103," ":104," ":105," ":106," ":107," ":108," ":109," ":110," ":111,
+                           "á":112,"Á":113,"é":114,"É":115,"í":116,"Í":117,"ó":118,"Ó":119,"ö":120,"Ö":121,"ő":122,"Ő":123,"ü":124,"Ü":125,"ű":126,"Ű":127}
         
 
         #vec2 pos, vec2 uv, float texIndex
@@ -50,7 +50,7 @@ class FontHandler:
         self.width = 100
         self.height = 50
 
-        self.textureAtlas = Image.open("res/fontTexture.png") #256x256px 16x16 chars 16chars/row
+        self.textureAtlas = Image.open("res/fontTextureBau2048.png") #256x256px 16x16 chars 16chars/row
         data = self.textureAtlas.tobytes("raw", "RGBA", 0, -1)
         
         self.width, self.height = self.textureAtlas.size
@@ -77,7 +77,7 @@ class FontHandler:
         renderer is an instance from the Renderer class
         """
         
-        xoffset = 0.7 #letter-spacing
+        xoffset = 0.5 #letter-spacing
         subtxt = txt
         longer = False
         if len(subtxt)>self.max_letter_count:

@@ -117,7 +117,7 @@ class Game:
         
         self.table.objects.append(self.tmpwg)
 
-        self.table.objects.append(AddNode(self.table.prefabHandler, "2314",[-1,-0.7,0]))
+        self.table.objects.append(MixerNode(self.table.prefabHandler, "2314",[-1,-0.7,0]))
 
 
         self.table.objects.append(FilePlayer(self.table.prefabHandler, "audiotest/Cartoon_On&On.wav",[2,-0.7,0]))
@@ -218,7 +218,7 @@ class Game:
                     self.drawingCurve = False
                     return
 
-                for i in self.table.objects:
+                for i in self.table.objects+[self.speakerOut]:
                     if hasattr(i, "checkIntersect"):
                         intersectObj = i.checkIntersect(output.x,output.y)
                         if intersectObj != None:
@@ -256,7 +256,7 @@ class Game:
         viewMat = np.matmul(self.proj,self.camera.camModel)
 
 
-        popupText = ""
+        popupText = str(self.FPSCounter.FPS)
         
 
         for i in self.table.objects:
@@ -284,7 +284,7 @@ class Game:
             self.mouseCurve.update(self.FPSCounter,self.audioHandler)
             self.mouseCurve.draw(self.shaderHandler,self.renderer,viewMat)
         
-        self.fontHandler.drawText("",-1*len(popupText)/50,-0.6,0.05,self.renderer)
+        self.fontHandler.drawText(popupText,-1*len(popupText)/50,-0.6,0.15,self.renderer)
 
         # Draw in game menu
         glutSwapBuffers()
