@@ -104,18 +104,14 @@ class Game:
 
         self.renderer = Renderer()
 
-
         self.FPSCounter = FPSCounter()
 
         self.drawingCurve = False
 
-
+        # Setup base Table class
         self.table = Table("maps/empty.json")
-
-        #self.tmpwg = SineGenerator(self.table.prefabHandler, "32",[0.5,0,0])
-        self.tmpwg = SquareGenerator(self.table.prefabHandler, "32",[1,0.7,0])
         
-        self.table.objects.append(self.tmpwg)
+        self.table.objects.append(SquareGenerator(self.table.prefabHandler, "32",[1,0.7,0]))
 
         self.table.objects.append(MixerNode(self.table.prefabHandler, "2314",[-1,-0.7,0]))
 
@@ -152,12 +148,19 @@ class Game:
         glViewport(0,0,self.windowSize[0],self.windowSize[1])
         self.inputHandler.changeWindowSize(self.windowSize)
     def addNodeRecursive(self, node):
+        """
+        Recursive function for adding the connected nodes to the sortedNodes list.
+        """
         self.sortedNodes.append(node)
         for cp in node.connpoints:
             if cp.side == "in":
                 if cp.bezier is not None:
                     self.addNodeRecursive(cp.bezier.fromConnPoint.parent)
     def rearrangeNodes(self):
+        """
+        Creates a list of nodes from the speaker using the connected bezier curves.
+        Then it reverses the list creating the required order of nodes for the audio processing.
+        """
         self.sortedNodes = []
         if self.speakerOut.connpoints[0].bezier is not None:
             curnode = self.speakerOut.connpoints[0].bezier.fromConnPoint.parent
@@ -186,24 +189,29 @@ class Game:
                                     if intersectObj.side != self.mouseCurve.fromConnPoint.side:
                                         if intersectObj.parent == self.mouseCurve.fromConnPoint.parent:
                                             break
+                                        # Check if there are already connected curves to the same connectionpoints
                                         alreadyConnected = []
                                         for bc in self.table.objects+[self.speakerOut]:
                                             if type(bc)==BezierCurve:
                                                 if intersectObj == bc.fromConnPoint or intersectObj == bc.toConnPoint or self.mouseCurve.fromConnPoint == bc.fromConnPoint or self.mouseCurve.fromConnPoint == bc.toConnPoint:
                                                     alreadyConnected.append(bc)
                                         for bc in alreadyConnected:
+                                            # Remove previously connected curves
                                             bc.fromConnPoint.bezier = None
                                             bc.toConnPoint.bezier = None
                                             self.table.objects.remove(bc)
                                         fromPoint = self.mouseCurve.fromConnPoint
                                         toPoint = intersectObj
                                         if intersectObj.side == "out":
+                                            # If its connected from input -> output, then it reverses the connection
                                             fromPoint = intersectObj
                                             toPoint = self.mouseCurve.fromConnPoint
+                                        # Adds curve to the table objects
                                         newbc = BezierCurve(self.table.prefabHandler, fromPoint,toPoint)
                                         self.table.objects.append(newbc)
                                         intersectObj.bezier = newbc
                                         self.mouseCurve.fromConnPoint.bezier = newbc
+                                        # Recreate the update order graph
                                         self.rearrangeNodes()
                                         break
                 self.drawingCurve = False             
@@ -232,9 +240,11 @@ class Game:
                                         bc.toConnPoint.bezier = None
                                         bc.fromConnPoint.bezier = None
                                 else:
+                                    # Start drawing curve from clicked connectionpoint
                                     self.drawingCurve = True
                                     self.mouseCurve.fromConnPoint = intersectObj
                             else:
+                                # Grab object
                                 self.grabbedNode = intersectObj
                                 self.activeNode = intersectObj
                             break
@@ -267,7 +277,7 @@ class Game:
 
         popupText = str(self.FPSCounter.FPS)
         
-
+        # Drawing and updating the objects
         for i in self.table.objects:
             i.draw(self.shaderHandler,self.renderer,viewMat)
             if hasattr(i, "drawText"):
@@ -275,16 +285,15 @@ class Game:
             if hasattr(i, "update"):
                 i.update(self.FPSCounter,self.audioHandler)
 
-
+        # Sorted update for audio processing
         for i in self.sortedNodes:
             if hasattr(i, "audioUpdate") and not self.audioHandler.dataReady:
                 i.audioUpdate(self.FPSCounter,self.audioHandler)
             
         self.speakerOut.draw(self.shaderHandler,self.renderer,viewMat)
         self.speakerOut.update(self.FPSCounter,self.audioHandler)
-        #self.tmpwg.draw(self.shaderHandler,self.renderer,viewMat)
-        #self.tmpwg.update(self.FPSCounter.deltaTime,self.audioHandler)
 
+        # Get mouseCoordinate in 3D space
         output = self.inputHandler.screenToWorld(self.proj,self.camera,self.inputHandler.mouseX,self.inputHandler.mouseY)
 
         if self.grabbedNode != None:
@@ -294,9 +303,9 @@ class Game:
             self.mouseCurve.toPos = glm.vec3(output.x, output.y, 0)*50
             self.mouseCurve.update(self.FPSCounter,self.audioHandler)
             self.mouseCurve.draw(self.shaderHandler,self.renderer,viewMat)
-        self.fontHandler.drawText(popupText,-1*len(popupText)/50,-0.6,0.15,self.renderer)
+        #self.fontHandler.drawText(popupText,-1*len(popupText)/50,-0.6,0.15,self.renderer)
 
-        # Draw in game menu
+
         glutSwapBuffers()
         
         self.inputHandler.updateKeysDown()
