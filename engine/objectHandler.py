@@ -6,6 +6,9 @@ import pyrr
 class Object3D:
     def __init__(self,filename,texture="res/Gun.png",textureRepeat=False):
         self.points, self.indices = np.array([]),np.array([])
+        self.va = None
+        self.ib = None
+        self.texture = None
         if filename != None:
             self.filePath = filename
             self.points, self.indices = processObjFile(self.filePath)

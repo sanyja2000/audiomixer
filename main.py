@@ -79,7 +79,7 @@ class Game:
         if OPENGL_VERSION == 3:
             self.shaderHandler.loadShader("default","shaders/3.3/vertex_new.shader","shaders/3.3/fragment_new.shader")
             self.shaderHandler.loadShader("default_transparent","shaders/3.3/vertex_new.shader","shaders/3.3/fragment_def_transparent.shader")
-            self.shaderHandler.loadShader("font","shaders/3.3/vertex_font.shader","shaders/3.3/fragment_font.shader")
+            self.shaderHandler.loadShader("font","shaders/3.3/vertex_font3d.shader","shaders/3.3/fragment_font.shader")
             self.shaderHandler.loadShader("bezier","shaders/3.3/bezier.vert","shaders/3.3/bezier.frag")
         else:
             # TODO: Add pauseMenu shaders
@@ -129,11 +129,12 @@ class Game:
 
 
         self.audioHandler.speakerStart()
-        #self.audioHandler.playSound("res/audio/feel_cut.wav")
         self.mouseCurve = BezierCurve(self.table.prefabHandler, None, None)
 
         self.camera = Camera()
 
+
+        self.activeNode = None
         self.grabbedNode = None
 
         self.sortedNodes = []
@@ -223,16 +224,24 @@ class Game:
                         intersectObj = i.checkIntersect(output.x,output.y)
                         if intersectObj != None:
                             if(type(intersectObj)==ConnectionPoint):
-                                self.drawingCurve = True
-                                self.mouseCurve.fromConnPoint = intersectObj
+                                if self.inputHandler.isKeyHeldDown(b'x'):
+                                    # Delete curve if x pressed down
+                                    if intersectObj.bezier is not None:
+                                        bc = intersectObj.bezier
+                                        self.table.objects.remove(intersectObj.bezier)
+                                        bc.toConnPoint.bezier = None
+                                        bc.fromConnPoint.bezier = None
+                                else:
+                                    self.drawingCurve = True
+                                    self.mouseCurve.fromConnPoint = intersectObj
                             else:
                                 self.grabbedNode = intersectObj
+                                self.activeNode = intersectObj
                             break
             if args[0] == 2:
                 # Right click down
                 self.inputHandler.mouseRightDown = True
                 self.camera.savedPos = glm.vec3(self.inputHandler.mouseX,self.inputHandler.mouseY,0)/200-self.camera.pos
-                pass
 
 
     def showScreen(self):
@@ -261,6 +270,8 @@ class Game:
 
         for i in self.table.objects:
             i.draw(self.shaderHandler,self.renderer,viewMat)
+            if hasattr(i, "drawText"):
+                i.drawText(self.fontHandler,self.renderer,viewMat)
             if hasattr(i, "update"):
                 i.update(self.FPSCounter,self.audioHandler)
 
@@ -283,7 +294,6 @@ class Game:
             self.mouseCurve.toPos = glm.vec3(output.x, output.y, 0)*50
             self.mouseCurve.update(self.FPSCounter,self.audioHandler)
             self.mouseCurve.draw(self.shaderHandler,self.renderer,viewMat)
-        
         self.fontHandler.drawText(popupText,-1*len(popupText)/50,-0.6,0.15,self.renderer)
 
         # Draw in game menu

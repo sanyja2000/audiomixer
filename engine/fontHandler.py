@@ -3,6 +3,7 @@ from PIL import Image, ImageFont, ImageDraw
 from engine.renderer import Shader,VertexArray, VertexBuffer, IndexBuffer, VertexBufferLayout
 import numpy as np
 from ctypes import sizeof, c_float
+import glm
 
 # tmp import
 import time
@@ -107,9 +108,62 @@ class FontHandler:
            
         self.shader.SetUniform4f("u_PosRotScl",x,y,0,scl)
         self.shader.SetUniform1i("u_Texture",0)
+        self.shader.SetUniform1i("u_is3d",0)
+
+        mvp = np.identity(4)        
+        self.shader.SetUniformMat4f("u_MVP", mvp)
               
         renderer.Draw(self.va,self.ib,self.shader,drawUntil=len(subtxt)*6)
         glBindTexture(GL_TEXTURE_2D, 0)
         if longer:
             self.drawText(txt[self.max_letter_count:],x+scl*xoffset*self.max_letter_count,y,scl,renderer)
+    
+    def drawText3D(self,txt,modelMat,scl,viewMat,renderer):
+        """
+        Usage: txt as a python string;
+        pos from -1 to 1 left-to-right, bottom-to-top;
+        scl a small value around 0.05;
+        renderer is an instance from the Renderer class
+        """
+        xoffset = 0.5 #letter-spacing
+        subtxt = txt
+        longer = False
+        if len(subtxt)>self.max_letter_count:
+            longer = True
+            subtxt = txt[:self.max_letter_count]
+        self.shader.Bind()
+        self.va.Bind()
+        glBindTexture(GL_TEXTURE_2D,self.TextureAtlasId)
+
+        
+        self.points = np.zeros((len(subtxt)*self.max_letter_count), np.float32)
+        
+        for c in range(len(subtxt)):
+            for d in range(4):
+                self.points[c*self.max_letter_count+d*5] = self.values[d][0]+c*xoffset
+                self.points[c*self.max_letter_count+1+d*5] = self.values[d][1]
+                self.points[c*self.max_letter_count+2+d*5] = self.values[d][2]
+                self.points[c*self.max_letter_count+3+d*5] = self.values[d][3]
+                try:
+                    self.points[c*self.max_letter_count+4+d*5] = self.letterDict[subtxt[c]]
+                except KeyError as ke:
+                    self.points[c*self.max_letter_count+4+d*5] = self.letterDict["_"]
+
+        #print(self.points)     
+        self.vb.Bind()
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(c_float)*len(self.points),self.points)
+           
+        self.shader.SetUniform4f("u_PosRotScl",0,0,0,scl)
+        self.shader.SetUniform1i("u_Texture",0)
+        self.shader.SetUniform1i("u_is3d",1)
+
+
+        mvp = np.transpose(np.matmul(viewMat,modelMat))        
+        self.shader.SetUniformMat4f("u_MVP", mvp)
+
+        renderer.Draw(self.va,self.ib,self.shader,drawUntil=len(subtxt)*6)
+        glBindTexture(GL_TEXTURE_2D, 0)
+        if longer:
+            pass
+            #self.drawText3D(txt[self.max_letter_count:],modelMat,scl,viewMat,renderer)
             

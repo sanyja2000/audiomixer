@@ -280,6 +280,24 @@ class FilePlayer(NodeElement):
                     outsig.data = self.wf.readframes(SAMPLESIZE//2)
                 outsig.data = np.frombuffer(outsig.data, dtype=np.int16)
 
+class TextDisplay:
+    def __init__(self,ph,props):
+        """Text displayer"""
+        self.model = ph.empty()
+        self.model.SetScale(props["scale"])
+        self.model.SetPosition(np.array(props["pos"]))
+        self.model.SetRotation(np.array(props["rot"]))
+        self.model.defaultPosition = np.array(props["pos"])
+        self.positionOffset = glm.vec3(props["posoffset"])
+        self.text = "asd"
+
+        self.shaderName = "font"
+    def draw(self,shaderhandler,renderer,viewMat):
+        pass
+    def updatePos(self,pos):
+        self.model.SetPosition(pos+self.positionOffset)
+
+
 class ConstantNode(NodeElement):
     def __init__(self,ph,name, pos):
         """Inputs: None. Output: constant*np.ones(n)"""
@@ -289,6 +307,9 @@ class ConstantNode(NodeElement):
         self.outputs = ["signal"]
         self.lastSent = 0
         self.connpoints = []
+
+        self.textDisplay = TextDisplay(ph, {"pos":pos,"rot":[0,3.1415,0],"scale":0.2,"posoffset":[0.25,-0.1,-0.1]})
+
         self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*80
         for ind in range(len(self.inputs)):
             self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.1*ind,0])))  
@@ -313,10 +334,14 @@ class ConstantNode(NodeElement):
     def update(self,fpsCounter,audioHandler):
         for cp in self.connpoints:
             cp.updatePos(self.model.pos)
+        self.textDisplay.updatePos(self.model.pos)
     def audioUpdate(self,fpsCounter,audioHandler):
         outsig = self.connpoints[0]
         if outsig.bezier != None:
             outsig.data = np.frombuffer(self.outputData, dtype=np.int16)
+
+    def drawText(self,fontHandler,renderer,viewMat):
+        fontHandler.drawText3D(str(self.outputData[0]),self.textDisplay.model.modelMat,0.05,viewMat,renderer)
         
 
 class MixerNode(NodeElement):
