@@ -81,8 +81,9 @@ class Game:
             self.shaderHandler.loadShader("default_transparent","shaders/3.3/vertex_new.shader","shaders/3.3/fragment_def_transparent.shader")
             self.shaderHandler.loadShader("font","shaders/3.3/vertex_font3d.shader","shaders/3.3/fragment_font.shader")
             self.shaderHandler.loadShader("bezier","shaders/3.3/bezier.vert","shaders/3.3/bezier.frag")
+            self.shaderHandler.loadShader("propertyMenu","shaders/3.3/propertyMenu.vert","shaders/3.3/propertyMenu.frag")
         else:
-            # TODO: Add pauseMenu shaders
+            # TODO: Fix 2.1 compatibility on devices
             self.shaderHandler.loadShader("default","shaders/2.1/vertex_new.shader","shaders/2.1/fragment_new.shader")
             self.shaderHandler.loadShader("default_transparent","shaders/2.1/vertex_new.shader","shaders/2.1/fragment_def_transparent.shader")
             self.shaderHandler.loadShader("font","shaders/2.1/vertex_font.shader","shaders/2.1/fragment_font.shader")
@@ -129,6 +130,7 @@ class Game:
 
         self.camera = Camera()
 
+        self.pm = PropertyMenu()
 
         self.activeNode = None
         self.grabbedNode = None
@@ -227,6 +229,11 @@ class Game:
                     self.drawingCurve = False
                     return
 
+                if self.pm.isOpen:
+                    if self.inputHandler.mouseXNorm>0.5:
+                        # Clicked on property menu
+                        self.pm.checkPropertyClick(self.inputHandler.mouseXNorm, self.inputHandler.mouseYNorm)
+                        return
                 for i in self.table.objects+[self.speakerOut]:
                     if hasattr(i, "checkIntersect"):
                         intersectObj = i.checkIntersect(output.x,output.y)
@@ -246,8 +253,13 @@ class Game:
                             else:
                                 # Grab object
                                 self.grabbedNode = intersectObj
-                                self.activeNode = intersectObj
                             break
+                if self.activeNode != self.grabbedNode:
+                    if self.activeNode is not None:
+                        self.activeNode.isSelected = False
+                    self.activeNode = self.grabbedNode
+                    if self.grabbedNode is not None:
+                        self.activeNode.isSelected = True
             if args[0] == 2:
                 # Right click down
                 self.inputHandler.mouseRightDown = True
@@ -305,7 +317,10 @@ class Game:
             self.mouseCurve.draw(self.shaderHandler,self.renderer,viewMat)
         #self.fontHandler.drawText(popupText,-1*len(popupText)/50,-0.6,0.15,self.renderer)
 
-
+        if self.activeNode is not None:
+            self.pm.draw(self.shaderHandler, self.renderer, self.fontHandler)
+            self.pm.update(self.FPSCounter,self.audioHandler,self.inputHandler,self.activeNode)
+        
         glutSwapBuffers()
         
         self.inputHandler.updateKeysDown()

@@ -42,32 +42,6 @@ def dist(a,b):
     return math.sqrt((b[0]-a[0])**2+(b[1]-a[1])**2+(b[2]-a[2])**2)
 
 
-class Map:
-    def __init__(self,ph,props):
-        self.objFile = props["file"]
-        self.name = props["name"]
-        self.cardNum = props["cardNum"]
-        self.model = ph.loadFile(props["file"],props["texture"],textureRepeat=True)
-        self.model.SetScale(10)
-        self.model.SetPosition(np.array(props["pos"]))
-        self.model.SetRotation(np.array(props["rot"]))
-        # vec4 points, (x, y, z, radius) for sphere which is cleared
-        # maximum of 5 points
-        self.maxPoints = np.ones((5,4))
-        self.clearedPoints = np.array([[-5,-10.0,-5,2],[5,-10.0,-5,2]])
-    def draw(self,shaderhandler,renderer,viewMat):
-        points = []
-        for x in range(len(self.maxPoints)):
-            if x<len(self.clearedPoints):
-                points.append(self.clearedPoints[x])
-            else:
-                points.append(self.maxPoints[x])
-        parameters = {"u_Time":time.perf_counter(),"4fv,clearedPoints":np.array(points),"numPoints":len(self.clearedPoints)}
-        self.model.DrawWithShader(shaderhandler.getShader("map"),renderer,viewMat,options=parameters)
-
-
-
-
 
 class Decoration:
     def __init__(self,ph,props):
@@ -82,7 +56,7 @@ class Decoration:
         if("transparent" in props):
             self.shaderName = "default_transparent"
     def draw(self,shaderhandler,renderer,viewMat):
-        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
+        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":int(self.isSelected)})
     def update(self,fpsCounter,audioHandler):
         pass
         #self.model.SetRotation(np.array([self.model.rot[0],self.rot,self.model.rot[2]]))
@@ -98,11 +72,16 @@ class NodeElement:
         self.model.defaultPosition = np.array(props["pos"])
         self.inputs = {}
         self.outputs = {}
+        self.isSelected = False
+        self.changedProperty = True
+        self.properties = {}
 
         self.shaderName = "default"
     def draw(self,shaderhandler,renderer,viewMat):
         self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
     def update(self,fpsCounter,audioHandler):
+        pass
+    def updateProperty(self):
         pass
 
 class ConnectionPoint:
@@ -120,7 +99,7 @@ class ConnectionPoint:
         self.bezier = None
         self.data = None
     def draw(self,shaderhandler,renderer,viewMat):
-        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
+        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":0})
     def checkIntersect(self,x,y):
         if((self.model.pos[0]-x)**2+(self.model.pos[1]-y)**2<0.007):
             return True
@@ -156,7 +135,7 @@ class SineGenerator(NodeElement):
         return None
 
     def draw(self,shaderhandler,renderer,viewMat):
-        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
+        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":int(self.isSelected)})
         for cp in self.connpoints:
             cp.draw(shaderhandler,renderer,viewMat)
 
@@ -209,7 +188,7 @@ class SquareGenerator(NodeElement):
         return None
 
     def draw(self,shaderhandler,renderer,viewMat):
-        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
+        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":int(self.isSelected)})
         for cp in self.connpoints:
             cp.draw(shaderhandler,renderer,viewMat)
 
@@ -259,7 +238,7 @@ class FilePlayer(NodeElement):
         return None
 
     def draw(self,shaderhandler,renderer,viewMat):
-        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
+        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":int(self.isSelected)})
         for cp in self.connpoints:
             cp.draw(shaderhandler,renderer,viewMat)
 
@@ -275,7 +254,7 @@ class FilePlayer(NodeElement):
             if not audioHandler.dataReady and cur-self.lastSent>fpsCounter.deltaTime:
                 outsig.data = self.wf.readframes(SAMPLESIZE//2)
                 self.lastSent = cur
-                if len(outsig.data)<2048:
+                if len(outsig.data)<SAMPLESIZE:
                     self.wf.setpos(0)
                     outsig.data = self.wf.readframes(SAMPLESIZE//2)
                 outsig.data = np.frombuffer(outsig.data, dtype=np.int16)
@@ -307,10 +286,11 @@ class ConstantNode(NodeElement):
         self.outputs = ["signal"]
         self.lastSent = 0
         self.connpoints = []
+        self.properties = {"value":880,"proba1":3,"proba2":42}
 
         self.textDisplay = TextDisplay(ph, {"pos":pos,"rot":[0,3.1415,0],"scale":0.2,"posoffset":[0.25,-0.1,-0.1]})
 
-        self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*80
+        self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*self.properties["value"]
         for ind in range(len(self.inputs)):
             self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.1*ind,0])))  
         for ind in range(len(self.outputs)):
@@ -326,12 +306,17 @@ class ConstantNode(NodeElement):
         return None
 
     def draw(self,shaderhandler,renderer,viewMat):
-        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
+        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":int(self.isSelected)})
         for cp in self.connpoints:
             cp.draw(shaderhandler,renderer,viewMat)
 
-
+    def updateProperty(self):
+        self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*self.properties["value"]
+        self.changedProperty = False
+    
     def update(self,fpsCounter,audioHandler):
+        if self.changedProperty:
+            self.updateProperty()
         for cp in self.connpoints:
             cp.updatePos(self.model.pos)
         self.textDisplay.updatePos(self.model.pos)
@@ -373,7 +358,7 @@ class MixerNode(NodeElement):
         return None
 
     def draw(self,shaderhandler,renderer,viewMat):
-        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
+        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":int(self.isSelected)})
         for cp in self.connpoints:
             cp.draw(shaderhandler,renderer,viewMat)
 
@@ -384,7 +369,7 @@ class MixerNode(NodeElement):
     
     def audioUpdate(self,fpsCounter,audioHandler):
         outsig = self.connpoints[3]
-        outsig.data = np.ones(SAMPLESIZE, dtype=np.int16)
+        outsig.data = np.zeros(SAMPLESIZE, dtype=np.int16)
         multiplier = 0.5
         if self.mixconn.data is not None:
             multiplier = self.mixconn.data[0]/100
@@ -398,25 +383,6 @@ class MixerNode(NodeElement):
             self.bconn.data = None
             #outsig.data = np.maximum(self.bconn.data, outsig.data)
         
-        """
-        if outsig.bezier != None:
-            cur = fpsCounter.currentTime
-            
-            
-            if not audioHandler.dataReady and cur-self.lastSent>fpsCounter.deltaTime:
-                outsig.data = np.zeros(SAMPLESIZE, dtype=np.int16)
-                if self.aconn.data is not None:
-                    np.add(outsig.data, self.aconn.data, out=outsig.data, casting="unsafe")
-                    if self.aconn.bezier is not None:
-                        self.aconn.bezier.fromConnPoint.data = None
-                    #outsig.data += self.aconn.data//2
-                if self.bconn.data is not None:
-                    np.add(outsig.data, self.bconn.data, out=outsig.data, casting="unsafe")
-                    if self.bconn.bezier is not None:
-                        self.bconn.bezier.fromConnPoint.data = None
-                    #outsig.data += self.bconn.data//2
-                self.lastSent = cur
-        """
                 
 
 
@@ -444,7 +410,7 @@ class SpeakerOut(NodeElement):
         return None
 
     def draw(self,shaderhandler,renderer,viewMat):
-        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
+        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":int(self.isSelected)})
         for cp in self.connpoints:
             cp.draw(shaderhandler,renderer,viewMat)
 
@@ -509,16 +475,14 @@ class BezierCurve:
 
 class Camera:
     def __init__(self):
-        """Basic camera wrapper
-            syntax: {"name":"camera1","type":"camera","movement":"fixed","pos":[0,1,0],"rot":[0,0,0]}
+        """Basic camera wrapper, for position
         """
-        #self.pos = np.array([0,0,-1],dtype="float64")
         self.pos = glm.vec3(0,0,-2)
         self.savedPos = glm.vec3(0,0,-2)
-        #self.rot = np.array([0,0,0])
+
         self.rot = glm.vec3(0,0,0)
         self.camModel = None
-        #self.defaultPosition = np.array(props["pos"])
+
         self.update(0,0)
     def draw(self,shaderhandler,renderer,viewMat):
         pass
@@ -530,4 +494,97 @@ class Camera:
         self.camModel = np.matmul(rot,np.transpose(pyrr.matrix44.create_from_translation(self.pos)))
         """
         self.camModel=glm.lookAt(self.pos, self.pos + glm.vec3(0,0,1) , glm.vec3(0,1,0))
+        
+class PropertyMenu:
+    def __init__(self):
+        """
+            Property menu opening from the right
+        """
+        self.isOpen = True
+        self.backgroundTexture = Texture("res/1px.png")
+        self.points = np.array([0.5, -1, 0.0, 0.0,
+                                1, -1, 1.0, 0.0,
+                                1, 1, 1.0, 1.0,
+                                0.5, 1, 0.0, 1.0],dtype='float32')
+        self.indices = np.array([0,1,2, 2,3,0])
+        self.va = VertexArray()
+        self.vb = VertexBuffer(self.points)
+        self.layout = VertexBufferLayout()
+        self.layout.PushF(2)
+        self.layout.PushF(2)
+        self.va.AddBuffer(self.vb, self.layout)
+        self.ib = IndexBuffer(self.indices, 6)
+        self.shader = None
+        self.lastChangeTime = 0
+        self.blinkOn = True
+        self.selectedProperty = -1
+        self.string = "80"
+        self.propertyList = []
+
+        self.activeNodeName = "aaa"
+
+    def draw(self,shaderhandler,renderer,fontHandler):
+        """
+        Draw current properties for selected node
+        """
+        if self.shader is None:
+            self.shader = shaderhandler.getShader("propertyMenu")
+        self.backgroundTexture.Bind()
+        self.shader.Bind()
+
+        self.shader.SetUniform1i("u_Texture",0)
+        self.shader.SetUniform1i("u_time",0)
+        self.shader.SetUniform1f("xcoord",0)
+        renderer.Draw(self.va,self.ib,self.shader)
+
+        fontHandler.drawText(self.activeNodeName.upper(),0.55,0.4,0.05,renderer,spacing=0.7)
+        yoffset = 0.2
+        for prop in self.propertyList:
+            value = self.propertyList[prop]
+            isSelected = False
+            if self.selectedProperty > -1:
+                isSelected = list(self.propertyList)[self.selectedProperty] == prop
+            if isSelected:
+                value = self.string
+            if self.blinkOn or not isSelected:
+                fontHandler.drawText(prop+": "+str(value),0.55,yoffset,0.05,renderer)
+            else:
+                fontHandler.drawText(prop+": ",0.55,yoffset,0.05,renderer)
+            yoffset -= 0.1
+
+    def update(self,fpsCounter,audioHandler,inputHandler,activeNode):
+        if self.selectedProperty > -1:
+            if fpsCounter.currentTime-self.lastChangeTime>0.2:
+                self.lastChangeTime = fpsCounter.currentTime
+                self.blinkOn = not self.blinkOn
+            for n in "0123456789.":
+                if inputHandler.isKeyDown(str.encode(n)):
+                    self.string += n
+            if inputHandler.isKeyDown(b'\x08'):
+                # b'\x08' is backspace
+                self.string = self.string[:-1]
+            if inputHandler.isKeyDown(b'\r'):
+                # b'\r' is return
+                try:
+                    activeNode.properties[list(activeNode.properties)[self.selectedProperty]] = int(self.string)
+                    activeNode.changedProperty = True
+                    self.propertyList = activeNode.properties
+                except Exception as err:
+                    print("not valid number")
+                    print(err)
+                    
+                self.selectedProperty = -1
+                self.blinkOn = True
+        if activeNode is not None:
+            self.activeNodeName = (type(activeNode).__name__)
+            self.propertyList = activeNode.properties
+    def checkPropertyClick(self,mouseX,mouseY):
+        if self.selectedProperty == -1:
+            index = int(np.ceil((0.2-mouseY)/0.1))
+            if(index>-1 and index<len(self.propertyList)):
+                self.selectedProperty = index
+                self.string = str(self.propertyList[list(self.propertyList)[self.selectedProperty]])
+
+    
+
         

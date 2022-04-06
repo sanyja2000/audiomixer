@@ -7,6 +7,7 @@ varying vec3 v_normal;
 varying vec3 lightPos;
 
 uniform sampler2D u_Texture;
+uniform float selected;
 
 void main(){
     vec4 texColor = texture(u_Texture, v_TexCoord);
@@ -19,5 +20,8 @@ void main(){
       float diff = max(dot(norm, lightDir), 0.0);
     
     color = vec4(texColor.xyz*(0.3+diff),1.0);
+    if(selected==1 && v_normal.z>-0.71){
+      color = vec4(vec3(1,1,0)*(0.3+diff),1.0);
+    }
     //color = vec4(0.8,0.3,0.2,1.0);
 }

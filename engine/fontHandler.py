@@ -22,7 +22,7 @@ class FontHandler:
                            "`":64,"a":65,"b":66,"c":67,"d":68,"e":69,"f":70,"g":71,"h":72,"i":73,"j":74,"k":75,"l":76,"m":77,"n":78,"o":79,
                            "p":80,"q":81,"r":82,"s":83,"t":84,"u":85,"v":86,"w":87,"x":88,"y":89,"z":90,"{":91,"|":92,"}":93,"~":94," ":95,
                            " ":96," ":97," ":98," ":99," ":100," ":101," ":102," ":103," ":104," ":105," ":106," ":107," ":108," ":109," ":110," ":111,
-                           "á":112,"Á":113,"é":114,"É":115,"í":116,"Í":117,"ó":118,"Ó":119,"ö":120,"Ö":121,"ő":122,"Ő":123,"ü":124,"Ü":125,"ű":126,"Ű":127}
+                           "á":112,"Á":113,"é":114,"É":115,"í":116,"Í":117,"ó":118,"Ó":119,"ö":120,"Ö":121,"ő":122,"Ő":123,"ü":124,"Ü":125,"ű":126,"Ű":127," ":0}
         
 
         #vec2 pos, vec2 uv, float texIndex
@@ -70,7 +70,7 @@ class FontHandler:
         glBindTexture(GL_TEXTURE_2D, 0)
         #self.font = ImageFont.truetype("res/Montserrat-Regular.ttf", 70)
         
-    def drawText(self,txt,x,y,scl,renderer):
+    def drawText(self,txt,x,y,scl,renderer,spacing=0.5):
         """
         Usage: txt as a python string;
         x,y from -1 to 1 left-to-right, bottom-to-top;
@@ -78,7 +78,7 @@ class FontHandler:
         renderer is an instance from the Renderer class
         """
         
-        xoffset = 0.5 #letter-spacing
+        xoffset = spacing #letter-spacing
         subtxt = txt
         longer = False
         if len(subtxt)>self.max_letter_count:
