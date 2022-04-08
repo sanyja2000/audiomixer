@@ -116,9 +116,11 @@ class Game:
 
         self.table.objects.append(MixerNode(self.table.prefabHandler, "2314",[-1,-0.7,0]))
 
+        self.table.objects.append(DelayNode(self.table.prefabHandler, "23144",[-2,-0.7,0]))
 
-        self.table.objects.append(FilePlayer(self.table.prefabHandler, "audiotest/Cartoon_On&On.wav",[2,-0.7,0]))
-        self.table.objects.append(FilePlayer(self.table.prefabHandler, "audiotest/LostSky_Fearless.wav",[1,-0.7,0]))
+
+        self.table.objects.append(FilePlayer(self.table.prefabHandler, "audiotest/Cartoon_On&On.wav",[1,0,0]))
+        self.table.objects.append(FilePlayer(self.table.prefabHandler, "audiotest/WiiTheme.wav",[1,-0.7,0])) #"audiotest/LostSky_Fearless.wav"
 
         self.table.objects.append(ConstantNode(self.table.prefabHandler, "33322",[-1,1.4,0]))
 
@@ -260,6 +262,7 @@ class Game:
                     self.activeNode = self.grabbedNode
                     if self.grabbedNode is not None:
                         self.activeNode.isSelected = True
+                    self.pm.selectedProperty = -1
             if args[0] == 2:
                 # Right click down
                 self.inputHandler.mouseRightDown = True
@@ -316,8 +319,9 @@ class Game:
             self.mouseCurve.update(self.FPSCounter,self.audioHandler)
             self.mouseCurve.draw(self.shaderHandler,self.renderer,viewMat)
         #self.fontHandler.drawText(popupText,-1*len(popupText)/50,-0.6,0.15,self.renderer)
-
+        self.pm.isOpen = False
         if self.activeNode is not None:
+            self.pm.isOpen = True
             self.pm.draw(self.shaderHandler, self.renderer, self.fontHandler)
             self.pm.update(self.FPSCounter,self.audioHandler,self.inputHandler,self.activeNode)
         

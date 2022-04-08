@@ -221,6 +221,7 @@ class FilePlayer(NodeElement):
         self.inputs = []
         self.outputs = ["signal"]
         self.lastSent = 0
+        self.properties = {"file":name.split("/")[1][:7]+"..."}
         self.wf = wave.open(name, 'rb')
         self.connpoints = []
         for ind in range(len(self.inputs)):
@@ -254,7 +255,7 @@ class FilePlayer(NodeElement):
             if not audioHandler.dataReady and cur-self.lastSent>fpsCounter.deltaTime:
                 outsig.data = self.wf.readframes(SAMPLESIZE//2)
                 self.lastSent = cur
-                if len(outsig.data)<SAMPLESIZE:
+                if len(outsig.data)/2<SAMPLESIZE:
                     self.wf.setpos(0)
                     outsig.data = self.wf.readframes(SAMPLESIZE//2)
                 outsig.data = np.frombuffer(outsig.data, dtype=np.int16)
@@ -286,7 +287,7 @@ class ConstantNode(NodeElement):
         self.outputs = ["signal"]
         self.lastSent = 0
         self.connpoints = []
-        self.properties = {"value":880,"proba1":3,"proba2":42}
+        self.properties = {"value":50}
 
         self.textDisplay = TextDisplay(ph, {"pos":pos,"rot":[0,3.1415,0],"scale":0.2,"posoffset":[0.25,-0.1,-0.1]})
 
@@ -382,6 +383,91 @@ class MixerNode(NodeElement):
             np.add(outsig.data, self.bconn.data*multiplier, out=outsig.data, casting="unsafe")
             self.bconn.data = None
             #outsig.data = np.maximum(self.bconn.data, outsig.data)
+        
+                
+
+
+class DelayNode(NodeElement):
+    def __init__(self,ph,name, pos):
+        """Inputs: A,B. Output: A+B"""
+        
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/delaynode.png"})
+        self.inputs = ["in","wet"]
+        self.outputs = ["signal"]
+        self.lastSent = 0
+        self.connpoints = []
+        self.properties = {"frames":5}
+        for ind in range(len(self.inputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.14*ind+0.13,0])))  
+        for ind in range(len(self.outputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.35,-0.1*ind,0])))
+        self.defwet = 0.5
+        self.inconn = self.connpoints[0]
+        self.wetconn = self.connpoints[1]
+        self.frameDelay = 5
+        self.delayData = []
+        for x in range(self.properties["frames"] ):
+            self.delayData.append(np.zeros(SAMPLESIZE,dtype=np.int16))
+        self.currentDelayFrame = 0
+    def checkIntersect(self,x,y):
+        for cp in self.connpoints:
+            if cp.checkIntersect(x,y):
+                return cp
+        if self.model.pos[0]-self.model.scale*1 <x<self.model.pos[0]+self.model.scale*1:
+            if self.model.pos[1]-self.model.scale*1 <y<self.model.pos[1]+self.model.scale*1:
+                return self
+        return None
+
+    def draw(self,shaderhandler,renderer,viewMat):
+        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":int(self.isSelected)})
+        for cp in self.connpoints:
+            cp.draw(shaderhandler,renderer,viewMat)
+
+
+    def update(self,fpsCounter,audioHandler):
+        for cp in self.connpoints:
+            cp.updatePos(self.model.pos)
+        if self.changedProperty:
+            self.updateProperty()
+    
+    def audioUpdate(self,fpsCounter,audioHandler):
+        outsig = self.connpoints[2]
+        outsig.data = None
+
+        
+        if self.wetconn.data is not None:
+            multiplier = self.wetconn.data[0]/100
+            self.wetconn.data = None
+        else:
+            multiplier = self.defwet
+        if self.inconn.data is not None:
+            outsig.data = self.inconn.data*(1-multiplier) + self.delayData[self.currentDelayFrame]*multiplier
+            self.delayData[self.currentDelayFrame] = np.copy(outsig.data)#np.copy(self.inconn.data)
+            self.currentDelayFrame = (self.currentDelayFrame + 1) % self.frameDelay
+            self.inconn.data = None
+    
+    def updateProperty(self):
+        if self.properties["frames"] < 1:
+            self.properties["frames"] = 1
+            self.frameDelay = self.properties["frames"]
+            self.changedProperty = False
+            return
+        if self.properties["frames"] > 300:
+            self.properties["frames"] = 300
+            self.frameDelay = self.properties["frames"]
+            self.changedProperty = False
+            return
+        if self.properties["frames"] == self.frameDelay:
+            self.changedProperty = False
+            return
+        if self.properties["frames"] > self.frameDelay:
+            for x in range(self.properties["frames"]- self.frameDelay):
+                self.delayData.append(np.zeros(SAMPLESIZE,dtype=np.int16))
+        if self.properties["frames"] < self.frameDelay:
+            self.delayData = self.delayData[:self.properties["frames"]]
+            self.currentDelayFrame = self.currentDelayFrame % self.properties["frames"]
+        self.frameDelay = self.properties["frames"]
+        self.changedProperty = False
         
                 
 
@@ -553,6 +639,7 @@ class PropertyMenu:
             yoffset -= 0.1
 
     def update(self,fpsCounter,audioHandler,inputHandler,activeNode):
+        self.propertyList = activeNode.properties
         if self.selectedProperty > -1:
             if fpsCounter.currentTime-self.lastChangeTime>0.2:
                 self.lastChangeTime = fpsCounter.currentTime
