@@ -1,7 +1,4 @@
-from email.mime import audio
 import math
-from turtle import position
-from typing import Text
 
 from cv2 import multiply
 from engine.objectHandler import Object3D
@@ -14,6 +11,7 @@ import random
 import wave
 from OpenGL.GLUT import *
 import glm
+import pyfftw
 """
 This file contains the classes for different types of objects in the map files.
 Classes are required to have a draw function and optionally an update and moveWithKeys function.
@@ -75,10 +73,24 @@ class NodeElement:
         self.isSelected = False
         self.changedProperty = True
         self.properties = {}
-
+        self.connpoints = []
         self.shaderName = "default"
+    """
     def draw(self,shaderhandler,renderer,viewMat):
         self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat)
+    """
+    def draw(self,shaderhandler,renderer,viewMat):
+        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":int(self.isSelected)})
+        for cp in self.connpoints:
+            cp.draw(shaderhandler,renderer,viewMat)
+    def checkIntersect(self,x,y):
+        for cp in self.connpoints:
+            if cp.checkIntersect(x,y):
+                return cp
+        if self.model.pos[0]-self.model.scale*1 <x<self.model.pos[0]+self.model.scale*1:
+            if self.model.pos[1]-self.model.scale*1 <y<self.model.pos[1]+self.model.scale*1:
+                return self
+        return None
     def update(self,fpsCounter,audioHandler):
         pass
     def updateProperty(self):
@@ -125,15 +137,6 @@ class SineGenerator(NodeElement):
         for ind in range(len(self.inputs)):
             self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.55,-0.1*ind,0])))  
 
-    def checkIntersect(self,x,y):
-        for cp in self.connpoints:
-            if cp.checkIntersect(x,y):
-                return cp
-        if self.model.pos[0]-self.model.scale*1 <x<self.model.pos[0]+self.model.scale*1:
-            if self.model.pos[1]-self.model.scale*1 <y<self.model.pos[1]+self.model.scale*1:
-                return self
-        return None
-
     def draw(self,shaderhandler,renderer,viewMat):
         self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":int(self.isSelected)})
         for cp in self.connpoints:
@@ -177,20 +180,7 @@ class SquareGenerator(NodeElement):
             self.connpoints.append(ConnectionPoint(ph,self,list(self.inputs)[ind],"in",pos,glm.vec3([0.55,-0.1*ind,0])))  
         for ind in range(len(self.outputs)):
             self.connpoints.append(ConnectionPoint(ph,self,list(self.outputs)[ind],"out",pos,glm.vec3([-0.55,-0.1*ind,0])))
-        
-    def checkIntersect(self,x,y):
-        for cp in self.connpoints:
-            if cp.checkIntersect(x,y):
-                return cp
-        if self.model.pos[0]-self.model.scale*1 <x<self.model.pos[0]+self.model.scale*1:
-            if self.model.pos[1]-self.model.scale*1 <y<self.model.pos[1]+self.model.scale*1:
-                return self
-        return None
 
-    def draw(self,shaderhandler,renderer,viewMat):
-        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":int(self.isSelected)})
-        for cp in self.connpoints:
-            cp.draw(shaderhandler,renderer,viewMat)
 
 
     def update(self,fpsCounter,audioHandler):
@@ -228,20 +218,7 @@ class FilePlayer(NodeElement):
             self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.55,-0.1*ind,0])))  
         for ind in range(len(self.outputs)):
             self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.55,-0.1*ind,0])))
-        
-    def checkIntersect(self,x,y):
-        for cp in self.connpoints:
-            if cp.checkIntersect(x,y):
-                return cp
-        if self.model.pos[0]-self.model.scale*1 <x<self.model.pos[0]+self.model.scale*1:
-            if self.model.pos[1]-self.model.scale*1 <y<self.model.pos[1]+self.model.scale*1:
-                return self
-        return None
 
-    def draw(self,shaderhandler,renderer,viewMat):
-        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":int(self.isSelected)})
-        for cp in self.connpoints:
-            cp.draw(shaderhandler,renderer,viewMat)
 
 
     def update(self,fpsCounter,audioHandler):
@@ -297,19 +274,6 @@ class ConstantNode(NodeElement):
         for ind in range(len(self.outputs)):
             self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.34,-0.1*ind-0.2,0])))
         
-    def checkIntersect(self,x,y):
-        for cp in self.connpoints:
-            if cp.checkIntersect(x,y):
-                return cp
-        if self.model.pos[0]-self.model.scale*1 <x<self.model.pos[0]+self.model.scale*1:
-            if self.model.pos[1]-self.model.scale*1 <y<self.model.pos[1]+self.model.scale*1:
-                return self
-        return None
-
-    def draw(self,shaderhandler,renderer,viewMat):
-        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":int(self.isSelected)})
-        for cp in self.connpoints:
-            cp.draw(shaderhandler,renderer,viewMat)
 
     def updateProperty(self):
         self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*self.properties["value"]
@@ -348,20 +312,6 @@ class MixerNode(NodeElement):
         self.aconn = self.connpoints[0]
         self.bconn = self.connpoints[1]
         self.mixconn = self.connpoints[2]
-        
-    def checkIntersect(self,x,y):
-        for cp in self.connpoints:
-            if cp.checkIntersect(x,y):
-                return cp
-        if self.model.pos[0]-self.model.scale*1 <x<self.model.pos[0]+self.model.scale*1:
-            if self.model.pos[1]-self.model.scale*1 <y<self.model.pos[1]+self.model.scale*1:
-                return self
-        return None
-
-    def draw(self,shaderhandler,renderer,viewMat):
-        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":int(self.isSelected)})
-        for cp in self.connpoints:
-            cp.draw(shaderhandler,renderer,viewMat)
 
 
     def update(self,fpsCounter,audioHandler):
@@ -389,7 +339,7 @@ class MixerNode(NodeElement):
 
 class DelayNode(NodeElement):
     def __init__(self,ph,name, pos):
-        """Inputs: A,B. Output: A+B"""
+        """Inputs: signal, wet. Output: signal+lastsignal*wet"""
         
         NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/delaynode.png"})
         self.inputs = ["in","wet"]
@@ -409,19 +359,7 @@ class DelayNode(NodeElement):
         for x in range(self.properties["frames"] ):
             self.delayData.append(np.zeros(SAMPLESIZE,dtype=np.int16))
         self.currentDelayFrame = 0
-    def checkIntersect(self,x,y):
-        for cp in self.connpoints:
-            if cp.checkIntersect(x,y):
-                return cp
-        if self.model.pos[0]-self.model.scale*1 <x<self.model.pos[0]+self.model.scale*1:
-            if self.model.pos[1]-self.model.scale*1 <y<self.model.pos[1]+self.model.scale*1:
-                return self
-        return None
 
-    def draw(self,shaderhandler,renderer,viewMat):
-        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":int(self.isSelected)})
-        for cp in self.connpoints:
-            cp.draw(shaderhandler,renderer,viewMat)
 
 
     def update(self,fpsCounter,audioHandler):
@@ -469,49 +407,44 @@ class DelayNode(NodeElement):
         self.frameDelay = self.properties["frames"]
         self.changedProperty = False
         
-                
-
 
 
 class SpeakerOut(NodeElement):
     def __init__(self,ph,name, pos):
-        """Inputs: freq,amp. Output: wave signal"""
+        """Inputs: output signal"""
         
         NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/speaker.png"})
         self.inputs = ["signal"]
         self.connpoints = []
         self.lastSentTime = 0
+        self.properties = {"volume":100}
 
         self.outputSample = np.array([],dtype=np.int16)
         for ind in range(len(self.inputs)):
             self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.55,-0.1*ind,0])))
-        
-    def checkIntersect(self,x,y):
-        for cp in self.connpoints:
-            if cp.checkIntersect(x,y):
-                return cp
-        if self.model.pos[0]-self.model.scale*1 <x<self.model.pos[0]+self.model.scale*1:
-            if self.model.pos[1]-self.model.scale*1 <y<self.model.pos[1]+self.model.scale*1:
-                return self
-        return None
-
-    def draw(self,shaderhandler,renderer,viewMat):
-        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":int(self.isSelected)})
-        for cp in self.connpoints:
-            cp.draw(shaderhandler,renderer,viewMat)
 
 
     def update(self,fpsCounter,audioHandler):
         for cp in self.connpoints:
             cp.updatePos(self.model.pos)
         
+        if self.changedProperty:
+            self.updateProperty()
+        
         if not audioHandler.dataReady:
 
             if not self.connpoints[0].data is None:
-                audioHandler.dataPlaying = self.connpoints[0].data.astype(np.int16).tobytes()
+                audioHandler.dataPlaying = (self.connpoints[0].data*(self.properties["volume"]/100)).astype(np.int16).tobytes()
                 audioHandler.dataReady = True
                 if self.connpoints[0].bezier is not None:
                     self.connpoints[0].bezier.fromConnPoint.data = None
+
+    def updateProperty(self):
+        if self.properties["volume"]>100:
+            self.properties["volume"] = 100
+        if self.properties["volume"]<0:
+            self.properties["volume"] = 0
+        self.changedProperty = False
 
 
 
