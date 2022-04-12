@@ -584,8 +584,10 @@ class Camera:
     def __init__(self):
         """Basic camera wrapper, for position
         """
-        self.pos = glm.vec3(0,0,-2)
-        self.savedPos = glm.vec3(0,0,-2)
+        self.zoomLevel = -2
+        self.pos = glm.vec3(0,0,self.zoomLevel)
+        
+        self.savedPos = glm.vec3(0,0,self.zoomLevel)
 
         self.rot = glm.vec3(0,0,0)
         self.camModel = None
@@ -593,6 +595,14 @@ class Camera:
         self.update(0,0)
     def draw(self,shaderhandler,renderer,viewMat):
         pass
+    def changeZoom(self,dir):
+        self.zoomLevel += dir*0.1
+        if self.zoomLevel>-1.1:
+            self.zoomLevel = -1.1
+        if self.zoomLevel<-8:
+            self.zoomLevel = -8
+        self.pos = glm.vec3(self.pos.x,self.pos.y,self.zoomLevel)
+        self.update(0,0)
     def update(self,fpsCounter,audioHandler):
         """
         rotz = pyrr.matrix44.create_from_z_rotation(self.rot[2])
@@ -600,6 +610,7 @@ class Camera:
         rot = np.matmul(np.matmul(pyrr.matrix44.create_from_y_rotation(self.rot[1]),rotz),rotx)
         self.camModel = np.matmul(rot,np.transpose(pyrr.matrix44.create_from_translation(self.pos)))
         """
+        
         self.camModel=glm.lookAt(self.pos, self.pos + glm.vec3(0,0,1) , glm.vec3(0,1,0))
         
 class PropertyMenu:

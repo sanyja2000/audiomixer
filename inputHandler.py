@@ -1,5 +1,7 @@
+from audioop import mul
 from OpenGL.GLUT import *
 import sys
+from cv2 import multiply
 import glm
 
 class InputHandler:
@@ -36,7 +38,8 @@ class InputHandler:
     def screenToWorld(self,proj,camera,x,y):
         output = glm.unProject(glm.vec3(x,y,1.0), camera.camModel, proj, glm.vec4(0,0,self.windowSize[0],self.windowSize[1]))
         output.y*=-1
-        return output/5+glm.vec3(camera.pos.x*0.8,camera.pos.y*1.2,0.0)
+        multiplier = camera.zoomLevel/-2
+        return output/5*multiplier+glm.vec3(camera.pos.x*(0.8+(multiplier-1)*(-0.2)),camera.pos.y*(1.2+(multiplier-1)*(0.2)),0.0)
     def activeMouseEventHandler(self,*args):
         pass
     def keyDownHandler(self, *args):

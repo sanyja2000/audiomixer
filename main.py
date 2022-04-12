@@ -178,7 +178,6 @@ class Game:
         """
     def mouseClicked(self,*args):
         output = self.inputHandler.screenToWorld(self.proj,self.camera,self.inputHandler.mouseX,self.inputHandler.mouseY)
-        
 
         if args[1] == 1:
             if args[0] == 0:
@@ -268,6 +267,12 @@ class Game:
                 # Right click down
                 self.inputHandler.mouseRightDown = True
                 self.camera.savedPos = glm.vec3(self.inputHandler.mouseX,self.inputHandler.mouseY,0)/200-self.camera.pos
+            if args[0] == 3:
+                # Scrollwheel up
+                self.camera.changeZoom(1)
+            if args[0] == 4:
+                # Scrollwheel down
+                self.camera.changeZoom(-1)
 
 
     def showScreen(self):
