@@ -39,7 +39,17 @@ def lerpVec3(f,t,n):
 def dist(a,b):
     return math.sqrt((b[0]-a[0])**2+(b[1]-a[1])**2+(b[2]-a[2])**2)
 
+def lerpConst(f,t,n):
+    # Lerp with constaints
+    val = f*(1-n)+t*n
+    if f>t:
+        f,t=t,f
+    if val<f:
+        val = f
+    if val>t:
+        val = t
 
+    return val
 
 class Decoration:
     def __init__(self,ph,props):
@@ -211,7 +221,10 @@ class FilePlayer(NodeElement):
         self.inputs = []
         self.outputs = ["signal"]
         self.lastSent = 0
-        self.properties = {"file":name.split("/")[1][:7]+"..."}
+        self.properties = {"file":name.split("/")[1][:7]+"...","cue":0,"cueLength":10}
+        self.cueTime = 0
+        self.cueEnabled = True
+        self.cuePoint = 0
         self.wf = wave.open(name, 'rb')
         self.connpoints = []
         for ind in range(len(self.inputs)):
@@ -219,17 +232,35 @@ class FilePlayer(NodeElement):
         for ind in range(len(self.outputs)):
             self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.55,-0.1*ind,0])))
 
+    def updateProperty(self):
+        if self.properties["cue"] != 0:
+            if not self.cueEnabled:
+                self.cuePoint = self.wf.tell()
+                self.cueEnabled = True
+        else:
+            self.cueEnabled = False
+        self.properties["cueLength"] = int(self.properties["cueLength"])
+        if self.properties["cueLength"]<1:
+            self.properties["cueLength"] = 1
+        if self.cueTime>self.properties["cueLength"]:
+            self.cueTime = 0
 
 
     def update(self,fpsCounter,audioHandler):
         for cp in self.connpoints:
             cp.updatePos(self.model.pos)
+        if self.changedProperty:
+            self.updateProperty()
     
     def audioUpdate(self,fpsCounter,audioHandler):
         outsig = self.connpoints[0]
         if outsig.bezier != None:
             cur = fpsCounter.currentTime 
             if not audioHandler.dataReady and cur-self.lastSent>fpsCounter.deltaTime:
+                if self.cueEnabled:
+                    self.cueTime = (self.cueTime + 1) % self.properties["cueLength"]
+                    if self.cueTime == 0:
+                        self.wf.setpos(self.cuePoint)
                 outsig.data = self.wf.readframes(SAMPLESIZE//2)
                 self.lastSent = cur
                 if len(outsig.data)/2<SAMPLESIZE:
@@ -406,6 +437,63 @@ class DelayNode(NodeElement):
             self.currentDelayFrame = self.currentDelayFrame % self.properties["frames"]
         self.frameDelay = self.properties["frames"]
         self.changedProperty = False
+        
+
+class LinearAnim(NodeElement):
+    """Inputs: None. Output: constant*np.ones(n)"""
+    def __init__(self,ph,name, pos):   
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/constantnode.png"})
+        self.inputs = []
+        self.outputs = ["signal"]
+        self.lastSent = 0
+        self.animTime = 0
+        self.connpoints = []
+        
+        self.properties = {"from":100,"to":10,"time":1,"enabled":0,"repeat":0}
+        self.enabled = False
+
+        self.value = self.properties["from"]
+        self.textDisplay = TextDisplay(ph, {"pos":pos,"rot":[0,3.1415,0],"scale":0.2,"posoffset":[0.25,-0.1,-0.1]})
+
+        self.oneData = np.ones(SAMPLESIZE,dtype=np.int16)
+        for ind in range(len(self.inputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.1*ind,0])))  
+        for ind in range(len(self.outputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.34,-0.1*ind-0.2,0])))
+        
+
+    def updateProperty(self):
+        if self.properties["enabled"]!=0 and not self.enabled:
+            self.animTime = 0
+            self.enabled = True
+        #self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*self.properties["value"]
+        self.changedProperty = False
+    
+    def update(self,fpsCounter,audioHandler):
+        if self.changedProperty:
+            self.updateProperty()
+        for cp in self.connpoints:
+            cp.updatePos(self.model.pos)
+        self.textDisplay.updatePos(self.model.pos)
+        if self.changedProperty:
+            self.updateProperty()
+        if self.enabled:
+            self.animTime += fpsCounter.deltaTime
+            self.value = int(lerpConst(self.properties["from"],self.properties["to"],self.animTime/self.properties["time"]))
+            if self.animTime>=self.properties["time"]:
+                self.enabled = False
+                self.properties["enabled"] = 0
+
+           
+    def audioUpdate(self,fpsCounter,audioHandler):
+        outsig = self.connpoints[0]
+        
+        
+        if outsig.bezier != None:
+            outsig.data = np.frombuffer(self.oneData*self.value, dtype=np.int16)
+
+    def drawText(self,fontHandler,renderer,viewMat):
+        fontHandler.drawText3D(str(self.value),self.textDisplay.model.modelMat,0.05,viewMat,renderer)
         
 
 

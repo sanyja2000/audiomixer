@@ -122,7 +122,8 @@ class Game:
         self.table.objects.append(FilePlayer(self.table.prefabHandler, "audiotest/Cartoon_On&On.wav",[1,0,0]))
         self.table.objects.append(FilePlayer(self.table.prefabHandler, "audiotest/WiiTheme.wav",[1,-0.7,0])) #"audiotest/LostSky_Fearless.wav"
 
-        self.table.objects.append(ConstantNode(self.table.prefabHandler, "33322",[-1,1.4,0]))
+        self.table.objects.append(LinearAnim(self.table.prefabHandler, "33322",[-1,1.4,0]))
+        #self.table.objects.append(ConstantNode(self.table.prefabHandler, "33322",[-1,1.4,0]))
 
         self.speakerOut = SpeakerOut(self.table.prefabHandler, "3342",[-1,0.7,0])
 
