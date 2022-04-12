@@ -51,6 +51,13 @@ def lerpConst(f,t,n):
 
     return val
 
+def constraint(n,f,t):
+    if n<f:
+        return f
+    if n>t:
+        return t
+    return n
+
 class Decoration:
     def __init__(self,ph,props):
         """Basic wrapper for decoration objects. These don't interact with anything."""
@@ -134,12 +141,13 @@ class SineGenerator(NodeElement):
         """Inputs: amp. Output: sinewave signal"""
         
         NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/sinewave.png"})
-        self.inputs = ["amp","freq"]
+        self.inputs = ["freq","amp"]
         self.outputs = ["signal"]
         self.lastSent = 0
         self.processedFrames = 0
         self.deffreq = 440
-        self.defamp = 1
+        self.defamp = 1000
+        self.amp = self.defamp
         self.freq = self.deffreq
         self.connpoints = []
         for ind in range(len(self.outputs)):
@@ -159,15 +167,17 @@ class SineGenerator(NodeElement):
     def audioUpdate(self,fpsCounter,audioHandler):
         for cp in self.connpoints:
             if cp.name == "freq":
-                if cp.bezier is None or cp.data is None:
+                if cp.data is None:
                     self.freq = self.deffreq
                 else:
                     self.freq = np.abs(cp.data[0])
+            if cp.name == "amp" and cp.data is not None:
+                self.amp = cp.data[0]
             if cp.name == "signal" and cp.bezier != None:
                 cur = fpsCounter.currentTime
                 if not audioHandler.dataReady  and cur-self.lastSent>fpsCounter.deltaTime:
                     mult = self.freq/(44100/3.1415)
-                    cp.data = np.sin((np.arange(SAMPLESIZE)+self.processedFrames)*mult)*1000
+                    cp.data = np.sin((np.arange(SAMPLESIZE)+self.processedFrames)*mult)*self.amp
                     self.lastSent = cur
                     self.processedFrames += SAMPLESIZE
         
@@ -354,7 +364,7 @@ class MixerNode(NodeElement):
         outsig.data = np.zeros(SAMPLESIZE, dtype=np.int16)
         multiplier = 0.5
         if self.mixconn.data is not None:
-            multiplier = self.mixconn.data[0]/100
+            multiplier = constraint(self.mixconn.data[0]/100,0,1)
             self.mixconn.data = None
         if self.aconn.data is not None:
             np.add(outsig.data, self.aconn.data*(1-multiplier), out=outsig.data, casting="unsafe")
@@ -463,9 +473,11 @@ class LinearAnim(NodeElement):
         
 
     def updateProperty(self):
-        if self.properties["enabled"]!=0 and not self.enabled:
+        if self.properties["enabled"] != 0 and not self.enabled:
             self.animTime = 0
             self.enabled = True
+        else:
+            self.enabled = False
         #self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*self.properties["value"]
         self.changedProperty = False
     
@@ -481,8 +493,11 @@ class LinearAnim(NodeElement):
             self.animTime += fpsCounter.deltaTime
             self.value = int(lerpConst(self.properties["from"],self.properties["to"],self.animTime/self.properties["time"]))
             if self.animTime>=self.properties["time"]:
-                self.enabled = False
-                self.properties["enabled"] = 0
+                if self.properties["repeat"]==0:
+                    self.enabled = False
+                    self.properties["enabled"] = 0
+                else:
+                    self.animTime = 0
 
            
     def audioUpdate(self,fpsCounter,audioHandler):

@@ -2,7 +2,7 @@
 
 A 3D very basic audio creating tool based on the whyopengl engine.
 
-![sine wave as input frequency for square wave](https://github.com/sanyja2000/audiomixer/blob/master/screenshots/scrn3.png?raw=true)
+![sine wave as input frequency for square wave](https://github.com/sanyja2000/audiomixer/blob/master/screenshots/scrn7.png?raw=true)
 
 
 # Installation
