@@ -213,6 +213,8 @@ class SquareGenerator(NodeElement):
                     self.freq = self.deffreq
                 else:
                     self.freq = np.abs(cp.data[0])
+            if cp.name == "amp" and cp.data is not None:
+                self.amp = cp.data[0]
             if cp.name == "signal" and cp.bezier != None:
                 cur = fpsCounter.currentTime
                 if not audioHandler.dataReady and cur-self.lastSent>fpsCounter.deltaTime:
@@ -309,7 +311,7 @@ class ConstantNode(NodeElement):
 
         self.textDisplay = TextDisplay(ph, {"pos":pos,"rot":[0,3.1415,0],"scale":0.2,"posoffset":[0.25,-0.1,-0.1]})
 
-        self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*self.properties["value"]
+        self.outputData = np.ones(SAMPLESIZE,dtype=np.float32)*self.properties["value"]
         for ind in range(len(self.inputs)):
             self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.1*ind,0])))  
         for ind in range(len(self.outputs)):
@@ -329,7 +331,7 @@ class ConstantNode(NodeElement):
     def audioUpdate(self,fpsCounter,audioHandler):
         outsig = self.connpoints[0]
         if outsig.bezier != None:
-            outsig.data = np.frombuffer(self.outputData, dtype=np.int16)
+            outsig.data = self.outputData#np.frombuffer(self.outputData, dtype=np.float32)
 
     def drawText(self,fontHandler,renderer,viewMat):
         fontHandler.drawText3D(str(self.outputData[0]),self.textDisplay.model.modelMat,0.05,viewMat,renderer)
@@ -361,10 +363,10 @@ class MixerNode(NodeElement):
     
     def audioUpdate(self,fpsCounter,audioHandler):
         outsig = self.connpoints[3]
-        outsig.data = np.zeros(SAMPLESIZE, dtype=np.int16)
+        outsig.data = np.zeros(SAMPLESIZE, dtype=np.float32)
         multiplier = 0.5
         if self.mixconn.data is not None:
-            multiplier = constraint(self.mixconn.data[0]/100,0,1)
+            multiplier = constraint(self.mixconn.data[0],0,1)
             self.mixconn.data = None
         if self.aconn.data is not None:
             np.add(outsig.data, self.aconn.data*(1-multiplier), out=outsig.data, casting="unsafe")
@@ -398,7 +400,7 @@ class DelayNode(NodeElement):
         self.frameDelay = 5
         self.delayData = []
         for x in range(self.properties["frames"] ):
-            self.delayData.append(np.zeros(SAMPLESIZE,dtype=np.int16))
+            self.delayData.append(np.zeros(SAMPLESIZE,dtype=np.float32))
         self.currentDelayFrame = 0
 
 
@@ -415,12 +417,15 @@ class DelayNode(NodeElement):
 
         
         if self.wetconn.data is not None:
-            multiplier = self.wetconn.data[0]/100
+            multiplier = constraint(self.wetconn.data[0],0,1)
+            # TODO: file in, speaker out, wet sinewave
+            # multiplier cant be negative
             self.wetconn.data = None
         else:
             multiplier = self.defwet
         if self.inconn.data is not None:
-            outsig.data = self.inconn.data*(1-multiplier) + self.delayData[self.currentDelayFrame]*multiplier
+            outsig.data = np.array(self.inconn.data*(1-multiplier),dtype=np.float32)
+            outsig.data+= self.delayData[self.currentDelayFrame]*multiplier
             self.delayData[self.currentDelayFrame] = np.copy(outsig.data)#np.copy(self.inconn.data)
             self.currentDelayFrame = (self.currentDelayFrame + 1) % self.frameDelay
             self.inconn.data = None
@@ -428,24 +433,24 @@ class DelayNode(NodeElement):
     def updateProperty(self):
         if self.properties["frames"] < 1:
             self.properties["frames"] = 1
-            self.frameDelay = self.properties["frames"]
+            self.frameDelay = int(self.properties["frames"])
             self.changedProperty = False
             return
         if self.properties["frames"] > 300:
             self.properties["frames"] = 300
-            self.frameDelay = self.properties["frames"]
+            self.frameDelay = int(self.properties["frames"])
             self.changedProperty = False
             return
         if self.properties["frames"] == self.frameDelay:
             self.changedProperty = False
             return
         if self.properties["frames"] > self.frameDelay:
-            for x in range(self.properties["frames"]- self.frameDelay):
-                self.delayData.append(np.zeros(SAMPLESIZE,dtype=np.int16))
+            for x in range(int(self.properties["frames"])- self.frameDelay):
+                self.delayData.append(np.zeros(SAMPLESIZE,dtype=np.float32))
         if self.properties["frames"] < self.frameDelay:
             self.delayData = self.delayData[:self.properties["frames"]]
             self.currentDelayFrame = self.currentDelayFrame % self.properties["frames"]
-        self.frameDelay = self.properties["frames"]
+        self.frameDelay = int(self.properties["frames"])
         self.changedProperty = False
         
 
@@ -465,7 +470,7 @@ class LinearAnim(NodeElement):
         self.value = self.properties["from"]
         self.textDisplay = TextDisplay(ph, {"pos":pos,"rot":[0,3.1415,0],"scale":0.2,"posoffset":[0.25,-0.1,-0.1]})
 
-        self.oneData = np.ones(SAMPLESIZE,dtype=np.int16)
+        self.oneData = np.ones(SAMPLESIZE,dtype=np.float32)
         for ind in range(len(self.inputs)):
             self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.1*ind,0])))  
         for ind in range(len(self.outputs)):
@@ -491,7 +496,7 @@ class LinearAnim(NodeElement):
             self.updateProperty()
         if self.enabled:
             self.animTime += fpsCounter.deltaTime
-            self.value = int(lerpConst(self.properties["from"],self.properties["to"],self.animTime/self.properties["time"]))
+            self.value = lerpConst(self.properties["from"],self.properties["to"],self.animTime/self.properties["time"])
             if self.animTime>=self.properties["time"]:
                 if self.properties["repeat"]==0:
                     self.enabled = False
@@ -505,10 +510,13 @@ class LinearAnim(NodeElement):
         
         
         if outsig.bezier != None:
-            outsig.data = np.frombuffer(self.oneData*self.value, dtype=np.int16)
+            outsig.data = self.oneData*self.value#np.frombuffer(self.oneData*self.value, dtype=np.int16)
 
     def drawText(self,fontHandler,renderer,viewMat):
-        fontHandler.drawText3D(str(self.value),self.textDisplay.model.modelMat,0.05,viewMat,renderer)
+        if 0<self.value<100:
+            fontHandler.drawText3D(str(round(self.value,1)),self.textDisplay.model.modelMat,0.05,viewMat,renderer)
+        else:
+            fontHandler.drawText3D(str(int(self.value)),self.textDisplay.model.modelMat,0.05,viewMat,renderer)
         
 
 
@@ -700,7 +708,7 @@ class PropertyMenu:
             if inputHandler.isKeyDown(b'\r'):
                 # b'\r' is return
                 try:
-                    activeNode.properties[list(activeNode.properties)[self.selectedProperty]] = int(self.string)
+                    activeNode.properties[list(activeNode.properties)[self.selectedProperty]] = float(self.string)
                     activeNode.changedProperty = True
                     self.propertyList = activeNode.properties
                 except Exception as err:

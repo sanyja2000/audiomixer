@@ -113,6 +113,7 @@ class Game:
         self.table = Table("maps/empty.json")
         
         self.table.objects.append(SineGenerator(self.table.prefabHandler, "32",[1,0.7,0]))
+        self.table.objects.append(SquareGenerator(self.table.prefabHandler, "322",[1,1.4,0]))
 
         self.table.objects.append(MixerNode(self.table.prefabHandler, "2314",[-1,-0.7,0]))
 
@@ -124,6 +125,7 @@ class Game:
 
         self.table.objects.append(LinearAnim(self.table.prefabHandler, "33322",[-1,1.4,0]))
         self.table.objects.append(ConstantNode(self.table.prefabHandler, "33122",[-1,2.1,0]))
+        #self.table.objects.append(ConstantNode(self.table.prefabHandler, "33122",[-1,2.1,0]))
 
         self.speakerOut = SpeakerOut(self.table.prefabHandler, "3342",[-1,0.7,0])
 
