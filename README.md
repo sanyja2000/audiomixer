@@ -1,15 +1,15 @@
 ## audiomixer
 
-A 3D very basic audio creating tool based on the whyopengl engine.
+A very basic audio creating tool based on my [3D whyopengl engine](https://github.com/sanyja2000/whyopengl).
 
-![sine wave as input frequency for square wave](https://github.com/sanyja2000/audiomixer/blob/master/screenshots/scrn7.png?raw=true)
+![amplitude modulation with a sinewave and added delay effect](https://github.com/sanyja2000/audiomixer/blob/master/screenshots/scrn7.png?raw=true)
 
 
 # Installation
 
 The project requires Python 3.6 or newer.
 
-Packages needed to install:
+Libraries needed to install:
 
 ```pip install numpy Pillow pyrr pyglm pyaudio```
 
