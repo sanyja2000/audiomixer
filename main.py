@@ -83,11 +83,13 @@ class Game:
             self.shaderHandler.loadShader("bezier","shaders/3.3/bezier.vert","shaders/3.3/bezier.frag")
             self.shaderHandler.loadShader("propertyMenu","shaders/3.3/propertyMenu.vert","shaders/3.3/propertyMenu.frag")
         else:
-            # TODO: Fix 2.1 compatibility on devices
             self.shaderHandler.loadShader("default","shaders/2.1/vertex_new.shader","shaders/2.1/fragment_new.shader")
             self.shaderHandler.loadShader("default_transparent","shaders/2.1/vertex_new.shader","shaders/2.1/fragment_def_transparent.shader")
-            self.shaderHandler.loadShader("font","shaders/2.1/vertex_font.shader","shaders/2.1/fragment_font.shader")
-            
+            self.shaderHandler.loadShader("font","shaders/2.1/vertex_font3d.shader","shaders/2.1/fragment_font.shader")
+            self.shaderHandler.loadShader("bezier","shaders/2.1/bezier.vert","shaders/2.1/bezier.frag")
+            self.shaderHandler.loadShader("propertyMenu","shaders/2.1/propertyMenu.vert","shaders/2.1/propertyMenu.frag")
+            self.shaderHandler.loadShader("background","shaders/2.1/background.vert","shaders/2.1/background.frag")
+          
 
         self.fontHandler = FontHandler(self.shaderHandler.getShader("font"))
 
@@ -121,12 +123,17 @@ class Game:
 
 
         self.table.objects.append(FilePlayer(self.table.prefabHandler, "audiotest/Cartoon_On&On.wav",[1,0,0]))
-        self.table.objects.append(FilePlayer(self.table.prefabHandler, "audiotest/WiiTheme.wav",[1,-0.7,0])) #"audiotest/LostSky_Fearless.wav"
+        self.table.objects.append(FilePlayer(self.table.prefabHandler, "audiotest/AllIWant.wav",[1,-0.7,0])) #"audiotest/LostSky_Fearless.wav"
 
         self.table.objects.append(LinearAnim(self.table.prefabHandler, "33322",[-1,1.4,0]))
         self.table.objects.append(ConstantNode(self.table.prefabHandler, "33122",[-1,2.1,0]))
         #self.table.objects.append(ConstantNode(self.table.prefabHandler, "33122",[-1,2.1,0]))
 
+        self.keyboard = None
+        self.keyboard = Keyboard(self.table.prefabHandler, "kbm",[-1,1.4,0])
+        self.table.objects.append(self.keyboard)
+
+        
         self.speakerOut = SpeakerOut(self.table.prefabHandler, "3342",[-1,0.7,0])
 
 
@@ -134,6 +141,7 @@ class Game:
         self.mouseCurve = BezierCurve(self.table.prefabHandler, None, None)
 
         self.camera = Camera()
+        self.background = BackgroundPlane()
 
         self.pm = PropertyMenu()
 
@@ -334,6 +342,9 @@ class Game:
             self.pm.update(self.FPSCounter,self.audioHandler,self.inputHandler,self.activeNode)
         
         glutSwapBuffers()
+
+        if(self.keyboard):
+            self.keyboard.updateKeys(self.inputHandler)
         
         self.inputHandler.updateKeysDown()
         

@@ -1,6 +1,5 @@
 import math
 
-from cv2 import multiply
 from engine.objectHandler import Object3D
 from engine.renderer import IndexBuffer, Shader, Texture, VertexArray, VertexBuffer, VertexBufferLayout
 import numpy as np
@@ -11,7 +10,7 @@ import random
 import wave
 from OpenGL.GLUT import *
 import glm
-import pyfftw
+#import pyfftw
 """
 This file contains the classes for different types of objects in the map files.
 Classes are required to have a draw function and optionally an update and moveWithKeys function.
@@ -19,7 +18,7 @@ Classes are required to have a draw function and optionally an update and moveWi
 
 """
 
-SAMPLESIZE = 2048 # Must be even, choose higher for better performance
+SAMPLESIZE = 6144 # Must be even, choose higher for better performance
 
 
 def easeInOutSine(x):
@@ -57,6 +56,15 @@ def constraint(n,f,t):
     if n>t:
         return t
     return n
+
+
+def lerparr(arr,dlen):
+    # this function changes the arrays length to dlen
+    # and interpolates the values between
+    xp = np.arange(len(arr))
+    step = (len(arr)-1)/(dlen-1)
+    outarr = np.interp(np.arange(dlen)*step,xp,arr)
+    return outarr
 
 class Decoration:
     def __init__(self,ph,props):
@@ -143,6 +151,7 @@ class SineGenerator(NodeElement):
         NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/sinewave.png"})
         self.inputs = ["freq","amp"]
         self.outputs = ["signal"]
+        self.properties = {"offset":0}
         self.lastSent = 0
         self.processedFrames = 0
         self.deffreq = 440
@@ -171,13 +180,16 @@ class SineGenerator(NodeElement):
                     self.freq = self.deffreq
                 else:
                     self.freq = np.abs(cp.data[0])
-            if cp.name == "amp" and cp.data is not None:
-                self.amp = cp.data[0]
+            if cp.name == "amp":
+                if cp.data is not None:
+                    self.amp = cp.data
+                else:
+                    self.amp = self.defamp
             if cp.name == "signal" and cp.bezier != None:
                 cur = fpsCounter.currentTime
                 if not audioHandler.dataReady  and cur-self.lastSent>fpsCounter.deltaTime:
                     mult = self.freq/(44100/3.1415)
-                    cp.data = np.sin((np.arange(SAMPLESIZE)+self.processedFrames)*mult)*self.amp
+                    cp.data = np.sin((np.arange(SAMPLESIZE)+self.processedFrames)*mult)*self.amp+self.properties["offset"]
                     self.lastSent = cur
                     self.processedFrames += SAMPLESIZE
         
@@ -190,9 +202,11 @@ class SquareGenerator(NodeElement):
         NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/squarewave.png"})
         self.inputs = {"amp":0,"freq":4}
         self.outputs = {"signal":0}
+        self.properties = {"offset":0}
         self.processedFrames = 0
         self.deffreq = 440
-        self.defamp = 1
+        self.defamp = 1000
+        self.amp = self.defamp
         self.freq = self.deffreq
         self.lastSent = 0
         self.connpoints = []
@@ -213,13 +227,16 @@ class SquareGenerator(NodeElement):
                     self.freq = self.deffreq
                 else:
                     self.freq = np.abs(cp.data[0])
-            if cp.name == "amp" and cp.data is not None:
-                self.amp = cp.data[0]
+            if cp.name == "amp":
+                if cp.data is not None:
+                    self.amp = cp.data
+                else:
+                    self.amp = self.defamp
             if cp.name == "signal" and cp.bezier != None:
                 cur = fpsCounter.currentTime
                 if not audioHandler.dataReady and cur-self.lastSent>fpsCounter.deltaTime:
                     mult = self.freq/(44100/3.1415)
-                    cp.data = np.sign(np.sin((np.arange(SAMPLESIZE)+self.processedFrames)*mult))*1000
+                    cp.data = np.sign(np.sin((np.arange(SAMPLESIZE)+self.processedFrames)*mult))*self.amp+self.properties["offset"]
                     self.lastSent = cur
                     self.processedFrames += SAMPLESIZE
         
@@ -230,10 +247,10 @@ class FilePlayer(NodeElement):
         """Inputs: None. Output: file signal"""
         
         NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/inputfile.png"})
-        self.inputs = []
+        self.inputs = ["speed"]
         self.outputs = ["signal"]
         self.lastSent = 0
-        self.properties = {"file":name.split("/")[1][:7]+"...","cue":0,"cueLength":10}
+        self.properties = {"file":name.split("/")[1][:7]+"...","cue":0,"cueLength":10,"speed":1}
         self.cueTime = 0
         self.cueEnabled = True
         self.cuePoint = 0
@@ -256,6 +273,8 @@ class FilePlayer(NodeElement):
             self.properties["cueLength"] = 1
         if self.cueTime>self.properties["cueLength"]:
             self.cueTime = 0
+        if self.properties["speed"]<0.1:
+            self.properties["speed"] = 0.1
 
 
     def update(self,fpsCounter,audioHandler):
@@ -265,7 +284,11 @@ class FilePlayer(NodeElement):
             self.updateProperty()
     
     def audioUpdate(self,fpsCounter,audioHandler):
-        outsig = self.connpoints[0]
+        if self.connpoints[0].bezier != None and self.connpoints[0].data is not None:
+            d = np.abs(self.connpoints[0].data[0])
+            if d>0.01:
+                self.properties["speed"] = d
+        outsig = self.connpoints[1]
         if outsig.bezier != None:
             cur = fpsCounter.currentTime 
             if not audioHandler.dataReady and cur-self.lastSent>fpsCounter.deltaTime:
@@ -273,12 +296,69 @@ class FilePlayer(NodeElement):
                     self.cueTime = (self.cueTime + 1) % self.properties["cueLength"]
                     if self.cueTime == 0:
                         self.wf.setpos(self.cuePoint)
-                outsig.data = self.wf.readframes(SAMPLESIZE//2)
+                outsig.data = self.wf.readframes(int(SAMPLESIZE/2*self.properties["speed"]))
+                #outsig.data = lerparr(self.wf.readframes(int(SAMPLESIZE/2*self.properties["speed"])),SAMPLESIZE)
                 self.lastSent = cur
-                if len(outsig.data)/2<SAMPLESIZE:
+                if len(outsig.data)/2<int(SAMPLESIZE/2*self.properties["speed"])*2:
                     self.wf.setpos(0)
-                    outsig.data = self.wf.readframes(SAMPLESIZE//2)
-                outsig.data = np.frombuffer(outsig.data, dtype=np.int16)
+                    #print(len(outsig.data)/2, int(SAMPLESIZE*self.properties["speed"]))
+                    outsig.data = self.wf.readframes(int(SAMPLESIZE/2*self.properties["speed"]))
+                    #outsig.data = self.wf.readframes(SAMPLESIZE//2)
+                outsig.data = lerparr(np.frombuffer(outsig.data, dtype=np.int16),SAMPLESIZE)
+
+class Keyboard(NodeElement):
+    def __init__(self,ph,name, pos):
+        """Inputs: None. Output: constant*np.ones(n)"""
+        
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/keyboardnode.png"})
+        self.inputs = []
+        self.outputs = ["freq","gate"]
+        self.lastSent = 0
+        self.connpoints = []
+        self.properties = {"freq":261.63,"mult":1}
+        self.gate = 0
+        self.keys = "ysxdcvgbhnjm,"
+        self.freqs = [261.63,277.18,293.66,311.13,329.63,349.23,369.99,392,415.3,440,466.16,493.88,523.25]
+        self.outputKey = np.ones(SAMPLESIZE,dtype=np.float32)*self.properties["freq"]/440
+        #self.outputMult = np.ones(SAMPLESIZE,dtype=np.float32)*self.properties["mult"]
+        self.outputGate = np.ones(SAMPLESIZE,dtype=np.float32)*self.gate
+        
+        for ind in range(len(self.inputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.1*ind,0])))  
+        for ind in range(len(self.outputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.34,-0.1*ind,0])))
+        
+
+    def updateProperty(self):
+        self.outputKey = np.ones(SAMPLESIZE,dtype=np.float32)*self.properties["freq"]/440
+        #self.outputMult = np.ones(SAMPLESIZE,dtype=np.float32)*self.properties["mult"]
+        self.outputGate = np.ones(SAMPLESIZE,dtype=np.float32)*self.gate
+        self.changedProperty = False
+    
+    def update(self,fpsCounter,audioHandler):
+        if self.changedProperty:
+            self.updateProperty()
+        for cp in self.connpoints:
+            cp.updatePos(self.model.pos)
+    def audioUpdate(self,fpsCounter,audioHandler):
+        freqout = self.connpoints[0]
+        if freqout.bezier != None:
+            freqout.data = self.outputKey#np.frombuffer(self.outputData, dtype=np.float32)
+        gateout = self.connpoints[1]
+        if gateout.bezier != None:
+            gateout.data = self.outputGate
+    def updateKeys(self,inputHandler):
+        
+        keydown = 0
+        for k in self.keys:
+            if inputHandler.isKeyHeldDown(str.encode(k)) or inputHandler.isKeyDown(str.encode(k)):
+                self.properties["freq"]=self.freqs[self.keys.index(k)]
+                keydown = 1
+                break
+        if self.gate != keydown:
+            self.gate = keydown
+            self.updateProperty()
+        
 
 class TextDisplay:
     def __init__(self,ph,props):
@@ -448,8 +528,8 @@ class DelayNode(NodeElement):
             for x in range(int(self.properties["frames"])- self.frameDelay):
                 self.delayData.append(np.zeros(SAMPLESIZE,dtype=np.float32))
         if self.properties["frames"] < self.frameDelay:
-            self.delayData = self.delayData[:self.properties["frames"]]
-            self.currentDelayFrame = self.currentDelayFrame % self.properties["frames"]
+            self.delayData = self.delayData[:int(self.properties["frames"])]
+            self.currentDelayFrame = self.currentDelayFrame % int(self.properties["frames"])
         self.frameDelay = int(self.properties["frames"])
         self.changedProperty = False
         
@@ -730,3 +810,39 @@ class PropertyMenu:
     
 
         
+
+class BackgroundPlane:
+    """
+    Deskmat textured background
+    """
+    def __init__(self):
+        self.backgroundTexture = Texture("res/1px.png")
+        self.points = np.array([-1, -1, 0.0, 0.0,
+                                1, -1, 1.0, 0.0,
+                                1, 1, 1.0, 1.0,
+                                -1, 1, 0.0, 1.0],dtype='float32')
+        self.indices = np.array([0,1,2, 2,3,0])
+        self.va = VertexArray()
+        self.vb = VertexBuffer(self.points)
+        self.layout = VertexBufferLayout()
+        self.layout.PushF(2)
+        self.layout.PushF(2)
+        self.va.AddBuffer(self.vb, self.layout)
+        self.ib = IndexBuffer(self.indices, 6)
+        self.shader = None
+
+    def draw(self,shaderhandler,renderer,camera):
+        """
+        Draw current properties for selected node
+        """
+        if self.shader is None:
+            self.shader = shaderhandler.getShader("background")
+        self.backgroundTexture.Bind()
+        self.shader.Bind()
+
+        self.shader.SetUniform1i("u_Texture",0)
+        self.shader.SetUniform1i("u_time",0)
+        #self.shader.SetUniform1f("xcoord",0)
+        self.shader.SetUniform3f("xyzoom",camera.pos.x,camera.pos.y,camera.zoomLevel)
+        
+        renderer.Draw(self.va,self.ib,self.shader)
