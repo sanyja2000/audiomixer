@@ -597,6 +597,59 @@ class LinearAnim(NodeElement):
             fontHandler.drawText3D(str(round(self.value,1)),self.textDisplay.model.modelMat,0.05,viewMat,renderer)
         else:
             fontHandler.drawText3D(str(int(self.value)),self.textDisplay.model.modelMat,0.05,viewMat,renderer)
+
+class Sequencer(NodeElement):
+    """Inputs: clock. Output: constant*np.ones(n)"""
+    def __init__(self,ph,name, pos):
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/delaynode.png"})
+        self.inputs = ["clock"]
+        self.outputs = ["signal"]
+        self.lastSent = 0
+        self.connpoints = []
+        self.properties = {"steps":4,"freq1":440,"freq2":440,"freq3":440,"freq4":440}
+        self.stepNames = ["freq1","freq2","freq3","freq4"]
+        self.currentData = np.ones(SAMPLESIZE,dtype=np.float32)*self.properties["freq1"]
+        for ind in range(len(self.inputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.14*ind+0.13,0])))  
+        for ind in range(len(self.outputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.35,-0.1*ind,0])))
+        self.clock = self.connpoints[0]
+        self.outsig = self.connpoints[1]
+        self.lastval = 0
+        self.currentStep = 0
+
+    def update(self,fpsCounter,audioHandler):
+        for cp in self.connpoints:
+            cp.updatePos(self.model.pos)
+        if self.changedProperty:
+            self.updateProperty()
+    
+    def audioUpdate(self,fpsCounter,audioHandler):
+        self.outsig.data = None
+        
+        if self.clock.data is not None:
+            maxval = np.amax(self.clock.data)
+            if maxval != self.lastval:
+                self.currentStep=(self.currentStep+1)%self.properties["steps"]
+                self.currentData = np.ones(SAMPLESIZE,dtype=np.float32)*self.properties[self.stepNames[self.currentStep]]
+                self.lastval = maxval
+
+        self.outsig.data = self.currentData
+    
+    def updateProperty(self):
+        if self.properties["steps"] < 1:
+            self.properties["steps"] = 1
+            self.currentStep = 0
+            self.changedProperty = False
+            return
+        if self.properties["steps"] > 4:
+            self.properties["steps"] = 4
+            self.currentStep = 0
+            self.changedProperty = False
+            return
+        self.properties["steps"] = int(self.properties["steps"])
+        self.currentData = np.ones(SAMPLESIZE,dtype=np.float32)*self.properties["freq1"]
+        self.changedProperty = False
         
 
 

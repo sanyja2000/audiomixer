@@ -119,15 +119,15 @@ class Game:
 
         self.table.objects.append(MixerNode(self.table.prefabHandler, "2314",[-1,-0.7,0]))
 
-        self.table.objects.append(DelayNode(self.table.prefabHandler, "23144",[-2,-0.7,0]))
+        self.table.objects.append(Sequencer(self.table.prefabHandler, "23144",[-2,-0.7,0]))
 
 
         self.table.objects.append(FilePlayer(self.table.prefabHandler, "audiotest/Cartoon_On&On.wav",[1,0,0]))
         self.table.objects.append(FilePlayer(self.table.prefabHandler, "audiotest/AllIWant.wav",[1,-0.7,0])) #"audiotest/LostSky_Fearless.wav"
 
-        self.table.objects.append(LinearAnim(self.table.prefabHandler, "33322",[-1,1.4,0]))
+        #self.table.objects.append(LinearAnim(self.table.prefabHandler, "33322",[-1,1.4,0]))
         self.table.objects.append(ConstantNode(self.table.prefabHandler, "33122",[-1,2.1,0]))
-        #self.table.objects.append(ConstantNode(self.table.prefabHandler, "33122",[-1,2.1,0]))
+        self.table.objects.append(ConstantNode(self.table.prefabHandler, "33122",[-1,2.1,0]))
 
         self.keyboard = None
         self.keyboard = Keyboard(self.table.prefabHandler, "kbm",[-1,1.4,0])
