@@ -28,6 +28,14 @@ class Table:
                     print(obj)
     def loadNewMap(self,filename,player):
         self.__init__(filename,player)
+    def removeNodeObject(self,object):
+        for cp in object.connpoints:
+            if cp.bezier != None:
+                bc = cp.bezier
+                self.objects.remove(cp.bezier)
+                bc.toConnPoint.bezier = None
+                bc.fromConnPoint.bezier = None
+        self.objects.remove(object)
     def getObject(self,objName):
         """Returns an object with name:"objName". If it doesn't exist returns None."""
         for o in self.objects:

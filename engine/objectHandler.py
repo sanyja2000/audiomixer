@@ -3,6 +3,8 @@ from .objloader import processObjFile
 from .renderer import *
 import pyrr
 
+DRAWCALLCOUNT = 0
+
 class Object3D:
     def __init__(self,filename,texture="res/Gun.png",textureRepeat=False):
         self.points, self.indices = np.array([]),np.array([])
@@ -41,17 +43,25 @@ class Object3D:
         mvp = np.transpose(np.matmul(viewMat,self.modelMat))        
         shader.SetUniformMat4f("u_MVP", mvp)
         renderer.Draw(self.va,self.ib,shader)
+        global DRAWCALLCOUNT
+        DRAWCALLCOUNT += 1
     def GenerateModelMatrix(self):
         rxyz = np.matmul(np.matmul(pyrr.matrix44.create_from_x_rotation(self.rot[0]),pyrr.matrix44.create_from_y_rotation(self.rot[1])),pyrr.matrix44.create_from_z_rotation(self.rot[2]))
         scl = pyrr.matrix44.create_from_scale(np.array([self.scale,self.scale,self.scale]))
         self.modelMat = np.transpose(np.matmul(np.matmul(scl,rxyz),pyrr.matrix44.create_from_translation(np.array(self.pos))))
     def SetPosition(self,vec):
+        if np.min(self.pos == vec):
+            return
         self.pos = vec
         self.GenerateModelMatrix()
     def SetRotation(self,vec):
+        if np.min(self.rot == vec):
+            return
         self.rot = vec
         self.GenerateModelMatrix()
     def SetScale(self,scl):
+        if self.scale == scl:
+            return
         self.scale=scl
         self.GenerateModelMatrix()
     def Clone(self):

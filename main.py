@@ -6,6 +6,7 @@ import numpy as np
 import sys, math
 import time
 from engine.renderer import VertexBuffer, IndexBuffer, VertexArray, VertexBufferLayout, Shader, Renderer, Texture, FPSCounter, ShaderHandler
+import classHandler
 from inputHandler import InputHandler
 from engine.audioHandler import AudioHandler
 from engine.objloader import processObjFile
@@ -16,6 +17,7 @@ from threading import Thread
 from classHandler import *
 from engine.fontHandler import FontHandler
 from table import Table
+import engine.objectHandler
 
 def constrain(n,f,t):
     if n<f:
@@ -78,10 +80,13 @@ class Game:
         
         if OPENGL_VERSION == 3:
             self.shaderHandler.loadShader("default","shaders/3.3/vertex_new.shader","shaders/3.3/fragment_new.shader")
+            self.shaderHandler.loadShader("instanced","shaders/3.3/instanced.vert","shaders/3.3/fragment_new.shader")
             self.shaderHandler.loadShader("default_transparent","shaders/3.3/vertex_new.shader","shaders/3.3/fragment_def_transparent.shader")
             self.shaderHandler.loadShader("font","shaders/3.3/vertex_font3d.shader","shaders/3.3/fragment_font.shader")
             self.shaderHandler.loadShader("bezier","shaders/3.3/bezier.vert","shaders/3.3/bezier.frag")
             self.shaderHandler.loadShader("propertyMenu","shaders/3.3/propertyMenu.vert","shaders/3.3/propertyMenu.frag")
+            self.shaderHandler.loadShader("addMenu","shaders/3.3/addMenu.vert","shaders/3.3/addMenu.frag")
+            self.shaderHandler.loadShader("background","shaders/3.3/background.vert","shaders/3.3/background.frag")
         else:
             self.shaderHandler.loadShader("default","shaders/2.1/vertex_new.shader","shaders/2.1/fragment_new.shader")
             self.shaderHandler.loadShader("default_transparent","shaders/2.1/vertex_new.shader","shaders/2.1/fragment_def_transparent.shader")
@@ -114,20 +119,11 @@ class Game:
         # Setup base Table class
         self.table = Table("maps/empty.json")
         
-        self.table.objects.append(SineGenerator(self.table.prefabHandler, "32",[1,0.7,0]))
-        self.table.objects.append(SquareGenerator(self.table.prefabHandler, "322",[1,1.4,0]))
-
-        self.table.objects.append(MixerNode(self.table.prefabHandler, "2314",[-1,-0.7,0]))
-
-        self.table.objects.append(Sequencer(self.table.prefabHandler, "23144",[-2,-0.7,0]))
-
-
-        self.table.objects.append(FilePlayer(self.table.prefabHandler, "audiotest/Cartoon_On&On.wav",[1,0,0]))
-        self.table.objects.append(FilePlayer(self.table.prefabHandler, "audiotest/AllIWant.wav",[1,-0.7,0])) #"audiotest/LostSky_Fearless.wav"
+        
+        #self.table.objects.append(FilePlayer(self.table.prefabHandler, "audiotest/Cartoon_On&On.wav",[1,0,0]))
+        #self.table.objects.append(FilePlayer(self.table.prefabHandler, "audiotest/AllIWant.wav",[1,-0.7,0])) #"audiotest/LostSky_Fearless.wav"
 
         #self.table.objects.append(LinearAnim(self.table.prefabHandler, "33322",[-1,1.4,0]))
-        self.table.objects.append(ConstantNode(self.table.prefabHandler, "33122",[-1,2.1,0]))
-        self.table.objects.append(ConstantNode(self.table.prefabHandler, "33122",[-1,2.1,0]))
 
         self.keyboard = None
         self.keyboard = Keyboard(self.table.prefabHandler, "kbm",[-1,1.4,0])
@@ -144,6 +140,7 @@ class Game:
         self.background = BackgroundPlane()
 
         self.pm = PropertyMenu()
+        self.addMenu = AddMenu()
 
         self.activeNode = None
         self.grabbedNode = None
@@ -151,6 +148,8 @@ class Game:
         self.sortedNodes = []
 
         self.rearrangeNodes()
+
+        self.unDeletableClasses = ["Keyboard","SpeakerOut"]
 
         glutMainLoop()
     def errorMsg(self, *args):
@@ -166,6 +165,8 @@ class Game:
         """
         Recursive function for adding the connected nodes to the sortedNodes list.
         """
+        if node in self.sortedNodes:
+            return
         self.sortedNodes.append(node)
         for cp in node.connpoints:
             if cp.side == "in":
@@ -241,6 +242,21 @@ class Game:
                     self.drawingCurve = False
                     return
 
+                if self.inputHandler.mouseXNorm<-0.9:
+                    # Clicked on add menu 
+                    newNode = self.addMenu.checkAddClick(self.inputHandler.mouseXNorm, self.inputHandler.mouseYNorm)
+                    if newNode is not None:
+                        if self.grabbedNode != None:
+                            self.grabbedNode.isSelected = False
+                        if self.activeNode != None:
+                            self.activeNode.isSelected = False    
+                        self.grabbedNode = newNode(self.table.prefabHandler, "",[-1,0.7,0])
+                        self.table.objects.append(self.grabbedNode)
+                        self.activeNode = self.grabbedNode
+                        if self.grabbedNode is not None:
+                            self.activeNode.isSelected = True
+                    return
+
                 if self.pm.isOpen:
                     if self.inputHandler.mouseXNorm>0.5:
                         # Clicked on property menu
@@ -256,7 +272,9 @@ class Game:
                                     if intersectObj.bezier is not None:
                                         bc = intersectObj.bezier
                                         self.table.objects.remove(intersectObj.bezier)
+                                        bc.toConnPoint.data = None
                                         bc.toConnPoint.bezier = None
+                                        bc.fromConnPoint.data = None
                                         bc.fromConnPoint.bezier = None
                                 else:
                                     # Start drawing curve from clicked connectionpoint
@@ -279,21 +297,28 @@ class Game:
                 self.camera.savedPos = glm.vec3(self.inputHandler.mouseX,self.inputHandler.mouseY,0)/200-self.camera.pos
             if args[0] == 3:
                 # Scrollwheel up
-                self.camera.changeZoom(1)
+                if self.inputHandler.mouseXNorm<-0.9:
+                    self.addMenu.scroll(-1)
+                else:
+                    self.camera.changeZoom(1)
             if args[0] == 4:
                 # Scrollwheel down
-                self.camera.changeZoom(-1)
+                if self.inputHandler.mouseXNorm<-0.9:
+                    self.addMenu.scroll(1)
+                else:
+                    self.camera.changeZoom(-1)
 
 
     def showScreen(self):
-        
-
         now = time.perf_counter()
-        glutSetWindowTitle("AudioMixer - FPS: "+str(self.FPSCounter.FPS))
+        glutSetWindowTitle("AudioMixer - FPS: "+str(self.FPSCounter.FPS)+", "+str(round(self.FPSCounter.deltaTime*1000,2))+"ms, avg: "+str(round(self.FPSCounter.averageFrameTime*1000,2))+"ms. draw calls: "+str(engine.objectHandler.DRAWCALLCOUNT))
+
+        engine.objectHandler.DRAWCALLCOUNT = 0
     
         self.audioHandler.update()
 
         self.renderer.Clear()
+        self.background.draw(self.shaderHandler,self.renderer,self.camera,self.audioHandler)
 
 
         if self.inputHandler.mouseRightDown:
@@ -324,24 +349,38 @@ class Game:
         self.speakerOut.draw(self.shaderHandler,self.renderer,viewMat)
         self.speakerOut.update(self.FPSCounter,self.audioHandler)
 
+        classHandler.CPH.DrawWithShader(self.shaderHandler,self.renderer,viewMat)
+
+        #print(self.table.objects[0].model.pos)
+
         # Get mouseCoordinate in 3D space
         output = self.inputHandler.screenToWorld(self.proj,self.camera,self.inputHandler.mouseX,self.inputHandler.mouseY)
 
         if self.grabbedNode != None:
             self.grabbedNode.model.SetPosition(glm.vec3(output.x,output.y,0))
 
+        if self.activeNode != None:
+            if self.inputHandler.isKeyDown(b'\x7f') and not (type(self.activeNode).__name__ in self.unDeletableClasses):
+                # delete key
+                self.table.removeNodeObject(self.activeNode)
+                self.grabbedNode = None
+                self.activeNode = None
+
         if self.drawingCurve:
             self.mouseCurve.toPos = glm.vec3(output.x, output.y, 0)*50
             self.mouseCurve.update(self.FPSCounter,self.audioHandler)
             self.mouseCurve.draw(self.shaderHandler,self.renderer,viewMat)
-        #self.fontHandler.drawText(popupText,-1*len(popupText)/50,-0.6,0.15,self.renderer)
+        
         self.pm.isOpen = False
         if self.activeNode is not None:
             self.pm.isOpen = True
             self.pm.draw(self.shaderHandler, self.renderer, self.fontHandler)
             self.pm.update(self.FPSCounter,self.audioHandler,self.inputHandler,self.activeNode)
         
+        self.addMenu.draw(self.shaderHandler, self.renderer, self.fontHandler)
+
         glutSwapBuffers()
+
 
         if(self.keyboard):
             self.keyboard.updateKeys(self.inputHandler)
@@ -350,5 +389,6 @@ class Game:
         
         self.FPSCounter.drawFrame(now)
 
-g = Game()
+if __name__ == '__main__':
+    g = Game()
 

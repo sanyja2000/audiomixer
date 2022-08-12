@@ -181,6 +181,7 @@ class Texture:
 
 class Renderer:
     def __init__(self):
+        print(glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS),"texture slots are available.")
         pass
     def Clear(self):
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
@@ -191,6 +192,28 @@ class Renderer:
         if drawUntil == None:
             drawUntil = indbuf.Count
         glDrawElements(GL_TRIANGLES, drawUntil, GL_UNSIGNED_INT, None)
+    def DrawInstanced(self, vertarr, indbuf, shader, count, offsets):
+        shader.Bind()
+        vertarr.Bind()
+        indbuf.Bind()
+        drawUntil = indbuf.Count
+        instanceVBO = glGenBuffers(1)
+        glBindBuffer(GL_ARRAY_BUFFER, instanceVBO)
+        glBufferData(GL_ARRAY_BUFFER, offsets, GL_STATIC_DRAW)
+        glEnableVertexAttribArray(3)
+        glBindBuffer(GL_ARRAY_BUFFER, instanceVBO)
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(c_float), c_void_p(0))
+        #glVertexAttribPointer(i, element[1], element[0], element[2], layout.Stride, c_void_p(offset))
+        #glBindBuffer(GL_ARRAY_BUFFER, 0)
+        glVertexAttribDivisor(3, 1)
+        #glBindBuffer(GL_ARRAY_BUFFER, 0)
+        glDrawElementsInstanced(GL_TRIANGLES, drawUntil, GL_UNSIGNED_INT, None, count)
+
+
+# draw->buffer
+# flush
+#
+
 
 class FPSCounter:
     def __init__(self):
@@ -198,12 +221,18 @@ class FPSCounter:
         self.deltaTime = 0
         self.FPS = 0
         self.currentTime = 0
+        self.averageFrameTime = 0
+        self.pastFrameTimes = []
     def drawFrame(self, now):
         for x in range(len(self.fpsCounter)-1,0,-1):
             if self.fpsCounter[x]<now-1:
                 self.fpsCounter.remove(self.fpsCounter[x])
         if len(self.fpsCounter)>0:
             self.deltaTime = now-self.fpsCounter[-1]
+            if len(self.pastFrameTimes) > 100:
+                self.pastFrameTimes.pop(0)
+            self.pastFrameTimes.append(self.deltaTime)
+            self.averageFrameTime = sum(self.pastFrameTimes)/len(self.pastFrameTimes)
         self.fpsCounter.append(now)
         self.FPS = len(self.fpsCounter)
         self.currentTime = now

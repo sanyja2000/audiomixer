@@ -1,4 +1,5 @@
 import math
+from multiprocessing import parent_process
 
 from engine.objectHandler import Object3D
 from engine.renderer import IndexBuffer, Shader, Texture, VertexArray, VertexBuffer, VertexBufferLayout
@@ -684,7 +685,7 @@ class EnvelopeNode(NodeElement):
     def __init__(self,ph,name, pos):
         """Inputs: clock. Output: envelope signal"""
         
-        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/splitternode.png"})
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/envelopenode.png"})
         self.inputs = ["clock"]
         self.outputs = ["envelope"]
         self.connpoints = []
@@ -697,9 +698,9 @@ class EnvelopeNode(NodeElement):
         self.statetimer = 0
         self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*880
         for ind in range(len(self.inputs)):
-            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.14*ind+0.13,0])))  
+            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.14*ind,0])))  
         for ind in range(len(self.outputs)):
-            self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.35,-0.14*ind+0.13,0])))
+            self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.35,-0.14*ind,0])))
         
 
 
@@ -1234,10 +1235,10 @@ class AddMenu:
         self.blinkOn = True
         self.selectedItem = -1
         self.string = "80"
-        self.elementCount = 11
+        self.elementCount = 12
         self.displayElements = 11
         self.scrollOffset = 0
-        self.selectableClasses = [FilePlayer,SineGenerator,SquareGenerator,ConstantNode,MixerNode,DelayNode,SplitterNode,LinearAnim,SequencerNode,FilterNode,NoiseNode]
+        self.selectableClasses = [FilePlayer,SineGenerator,SquareGenerator,ConstantNode,MixerNode,DelayNode,SplitterNode,LinearAnim,SequencerNode,FilterNode,NoiseNode,EnvelopeNode]
 
         self.activeNodeName = "aaa"
 
@@ -1255,18 +1256,25 @@ class AddMenu:
         self.shader.SetUniform1f("xcoord",0)
         self.shader.SetUniform1f("selectedIndex",-1)#self.selectedItem/11+1/22)
         self.shader.SetUniform1f("ymax",self.elementCount/self.displayElements)
-        self.shader.SetUniform1f("scrollOffset",0)
+        self.shader.SetUniform1f("scrollOffset",self.scrollOffset)
         
         
         renderer.Draw(self.va,self.ib,self.shader)
 
         #fontHandler.drawText(self.activeNodeName.upper(),0.55,0.4,0.05,renderer)
 
+    def scroll(self, direction):
+        self.scrollOffset += direction/self.elementCount
+        if self.scrollOffset<0:
+            self.scrollOffset = 0
+        if self.scrollOffset>(self.elementCount-self.displayElements)/self.elementCount:
+            self.scrollOffset = (self.elementCount-self.displayElements)/self.elementCount
+
     def update(self,fpsCounter,audioHandler,inputHandler,activeNode):
         return
         
     def checkAddClick(self,mouseX,mouseY):
-        ind = math.floor((2-(mouseY+1))*11/2)
+        ind = math.floor((2-(mouseY+1))*11/2+self.scrollOffset*self.elementCount)
         if(ind < self.elementCount):
             self.selectedItem = ind
             return self.selectableClasses[self.selectedItem]
