@@ -10,15 +10,18 @@ import random
 import wave
 from OpenGL.GLUT import *
 import glm
-#import pyfftw
+import tkinter as tk
+import tkinter.filedialog
+import os.path
+from OpenGL.GL import *
+import pyfftw
+from threading import Thread
 """
 This file contains the classes for different types of objects in the map files.
-Classes are required to have a draw function and optionally an update and moveWithKeys function.
-
 
 """
 
-SAMPLESIZE = 6144 # Must be even, choose higher for better performance
+SAMPLESIZE = 3072 # Must be even, choose higher for better performance
 
 
 def easeInOutSine(x):
@@ -98,6 +101,7 @@ class NodeElement:
         self.isSelected = False
         self.changedProperty = True
         self.properties = {}
+        self.propertyTypes = {}
         self.connpoints = []
         self.shaderName = "default"
     """
@@ -137,6 +141,7 @@ class ConnectionPoint:
         self.data = None
     def draw(self,shaderhandler,renderer,viewMat):
         self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":0})
+        #CPH.drawablePoints.append(self)
     def checkIntersect(self,x,y):
         if((self.model.pos[0]-x)**2+(self.model.pos[1]-y)**2<0.007):
             return True
@@ -144,14 +149,46 @@ class ConnectionPoint:
     def updatePos(self,pos):
         self.model.SetPosition(pos+self.positionOffset)
 
+class ConnectionPointHandler:
+    def __init__(self):
+        self.drawablePoints = []
+    def DrawWithShader(self,shaderhandler,renderer,viewMat):
+        if len(self.drawablePoints) == 0:
+            return
+        #print(self.drawablePoints[0].model.pos)
+        shader = shaderhandler.getShader("instanced")
+        #self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":0})
+        shader.Bind()
+        self.drawablePoints[0].model.texture.Bind()
+        shader.SetUniform1i("u_Texture",0)
+        veclist = []
+        ori_p = np.matmul(np.append(self.drawablePoints[0].model.pos,1.0),np.matmul(viewMat,self.drawablePoints[0].model.modelMat))
+        for dp in self.drawablePoints:
+            # z x y
+            newpos = np.matmul(np.append(dp.model.pos,1.0),np.matmul(viewMat,dp.model.modelMat))
+            #veclist.append(np.array([0,newpos[1]*5,0]))
+            veclist.append((newpos)[:3])
+            #veclist.append(dp.model.pos-self.drawablePoints[0].model.pos)
+        
+        offsetList = np.array(veclist).flatten()
+        #offsetList = np.array([0,0,0,1,1,1,2,2,2])
+        #print(offsetList)
+        mvp = np.transpose(np.matmul(viewMat,self.drawablePoints[0].model.modelMat))
+        shader.SetUniformMat4f("u_MVP", mvp)
+        renderer.DrawInstanced(self.drawablePoints[0].model.va,self.drawablePoints[0].model.ib,shader,len(self.drawablePoints),offsetList)
+        self.drawablePoints = []
+
+CPH = ConnectionPointHandler()
+
 class SineGenerator(NodeElement):
     def __init__(self,ph,name, pos):
         """Inputs: amp. Output: sinewave signal"""
         
         NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/sinewave.png"})
-        self.inputs = ["freq","amp"]
+        self.inputs = ["amp","freq"]
         self.outputs = ["signal"]
         self.properties = {"offset":0}
+        self.propertyTypes = {"offset":"float"}
         self.lastSent = 0
         self.processedFrames = 0
         self.deffreq = 440
@@ -195,14 +232,16 @@ class SineGenerator(NodeElement):
         
 
 
+
 class SquareGenerator(NodeElement):
     def __init__(self,ph,name, pos):
         """Inputs: freq. Output: squarewave signal"""
         
         NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/squarewave.png"})
-        self.inputs = {"amp":0,"freq":4}
-        self.outputs = {"signal":0}
+        self.inputs = ["amp","freq"]
+        self.outputs = ["signal"]
         self.properties = {"offset":0}
+        self.propertyTypes = {"offset":"float"}
         self.processedFrames = 0
         self.deffreq = 440
         self.defamp = 1000
@@ -250,21 +289,45 @@ class FilePlayer(NodeElement):
         self.inputs = ["speed"]
         self.outputs = ["signal"]
         self.lastSent = 0
-        self.properties = {"file":name.split("/")[1][:7]+"...","cue":0,"cueLength":10,"speed":1}
+        self.validFile = False
+        self.openedFile = ""
+        if name == "":
+            self.properties = {"file":"<not selected>","cue":False,"cueLength":10,"speed":1,"paused":False,"reset":self.resetFile}
+        else:
+            self.properties = {"file":name,"cue":False,"cueLength":10,"speed":1,"paused":False,"reset":self.resetFile}
+            self.changeFileTo(name)
+        self.propertyTypes = {"file":"file","cue":"bool","cueLength":"integer","speed":"float","paused":"bool","reset":"button"}
         self.cueTime = 0
         self.cueEnabled = True
         self.cuePoint = 0
-        self.wf = wave.open(name, 'rb')
         self.connpoints = []
         for ind in range(len(self.inputs)):
             self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.55,-0.1*ind,0])))  
         for ind in range(len(self.outputs)):
             self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.55,-0.1*ind,0])))
 
+    def resetFile(self):
+        if self.validFile:
+            self.wf.setpos(0)
+
+    def changeFileTo(self,filename):
+        self.wf = wave.open(filename, 'rb')
+        self.validFile = True
+        self.openedFile = filename
+
     def updateProperty(self):
-        if self.properties["cue"] != 0:
+        if self.properties["file"]=="<not selected>":
+            self.validFile = False
+            self.connpoints[1].data = np.zeros(SAMPLESIZE,dtype=np.float32)
+        elif self.properties["file"]!=self.openedFile:
+            self.changeFileTo(self.properties["file"])
+            
+        if self.properties["cue"] != False:
             if not self.cueEnabled:
-                self.cuePoint = self.wf.tell()
+                if self.validFile:
+                    self.cuePoint = self.wf.tell()
+                else:
+                    self.cuePoint = 0
                 self.cueEnabled = True
         else:
             self.cueEnabled = False
@@ -284,6 +347,8 @@ class FilePlayer(NodeElement):
             self.updateProperty()
     
     def audioUpdate(self,fpsCounter,audioHandler):
+        if not self.validFile or self.properties["paused"]:
+            return
         if self.connpoints[0].bezier != None and self.connpoints[0].data is not None:
             d = np.abs(self.connpoints[0].data[0])
             if d>0.01:
@@ -306,6 +371,59 @@ class FilePlayer(NodeElement):
                     #outsig.data = self.wf.readframes(SAMPLESIZE//2)
                 outsig.data = lerparr(np.frombuffer(outsig.data, dtype=np.int16),SAMPLESIZE)
 
+
+class NoiseNode(NodeElement):
+    def __init__(self,ph,name, pos):
+        """Inputs: amp. Output: sinewave signal"""
+        
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/noisenode.png"})
+        self.inputs = []
+        self.outputs = ["signal"]
+        self.properties = {"offset":0}
+        self.propertyTypes = {"offset":"float"}
+        self.lastSent = 0
+        self.processedFrames = 0
+        self.connpoints = []
+        for ind in range(len(self.outputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.55,-0.1*ind,0])))
+        for ind in range(len(self.inputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.55,-0.1*ind,0])))  
+
+    def draw(self,shaderhandler,renderer,viewMat):
+        self.model.DrawWithShader(shaderhandler.getShader(self.shaderName),renderer,viewMat,options={"selected":int(self.isSelected)})
+        for cp in self.connpoints:
+            cp.draw(shaderhandler,renderer,viewMat)
+
+
+    def update(self,fpsCounter,audioHandler):
+        for cp in self.connpoints:
+            cp.updatePos(self.model.pos)
+    def audioUpdate(self,fpsCounter,audioHandler):
+        self.connpoints[0].data = np.random.normal(0, 2**15, SAMPLESIZE)
+        """
+        for cp in self.connpoints:
+            if cp.name == "freq":
+                if cp.data is None:
+                    self.freq = self.deffreq
+                else:
+                    self.freq = np.abs(cp.data[0])
+            if cp.name == "amp":
+                if cp.data is not None:
+                    self.amp = cp.data
+                else:
+                    self.amp = self.defamp
+            if cp.name == "signal" and cp.bezier != None:
+                cur = fpsCounter.currentTime
+                if not audioHandler.dataReady  and cur-self.lastSent>fpsCounter.deltaTime:
+                    mult = self.freq/(44100/3.1415)
+                    cp.data = np.sin((np.arange(SAMPLESIZE)+self.processedFrames)*mult)*self.amp+self.properties["offset"]
+                    self.lastSent = cur
+                    self.processedFrames += SAMPLESIZE
+        """
+        
+
+
+
 class Keyboard(NodeElement):
     def __init__(self,ph,name, pos):
         """Inputs: None. Output: constant*np.ones(n)"""
@@ -316,6 +434,7 @@ class Keyboard(NodeElement):
         self.lastSent = 0
         self.connpoints = []
         self.properties = {"freq":261.63,"mult":1}
+        self.propertyTypes = {"freq":"float","mult":"float"}
         self.gate = 0
         self.keys = "ysxdcvgbhnjm,"
         self.freqs = [261.63,277.18,293.66,311.13,329.63,349.23,369.99,392,415.3,440,466.16,493.88,523.25]
@@ -388,6 +507,7 @@ class ConstantNode(NodeElement):
         self.lastSent = 0
         self.connpoints = []
         self.properties = {"value":50}
+        self.propertyTypes = {"value":"float"}
 
         self.textDisplay = TextDisplay(ph, {"pos":pos,"rot":[0,3.1415,0],"scale":0.2,"posoffset":[0.25,-0.1,-0.1]})
 
@@ -424,7 +544,7 @@ class MixerNode(NodeElement):
         NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/mixernode.png"})
         self.inputs = ["A","B","mix"]
         self.outputs = ["signal"]
-        self.lastSent = 0
+
         self.connpoints = []
         self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*880
         for ind in range(len(self.inputs)):
@@ -456,9 +576,175 @@ class MixerNode(NodeElement):
             np.add(outsig.data, self.bconn.data*multiplier, out=outsig.data, casting="unsafe")
             self.bconn.data = None
             #outsig.data = np.maximum(self.bconn.data, outsig.data)
-        
-                
 
+
+
+class FilterNode(NodeElement):
+    def __init__(self,ph,name, pos):
+        """Inputs: A,B. Output: filtered A"""
+        
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/filternode.png"})
+        self.inputs = ["A","B"]
+        self.outputs = ["signal"]
+        self.lastSent = 0
+        self.connpoints = []
+
+        self.properties = {"frequency":4000,"enabled":True}
+        self.propertyTypes = {"frequency":"float","enabled":"bool"}
+
+        self.datain = pyfftw.empty_aligned(SAMPLESIZE, dtype='float32')
+        self.fftdata = pyfftw.empty_aligned(SAMPLESIZE//2+1, dtype='complex64')
+        self.dataout = pyfftw.empty_aligned(SAMPLESIZE, dtype='float32')
+
+        self.samplerate = 48000
+
+        self.fft_function_forw = pyfftw.FFTW(self.datain, self.fftdata)
+        self.fft_function_back = pyfftw.FFTW(self.fftdata, self.dataout, direction='FFTW_BACKWARD')
+        
+        self.window = np.hanning(SAMPLESIZE)
+
+        self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*880
+        for ind in range(len(self.inputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.14*ind+0.13,0])))  
+        for ind in range(len(self.outputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.35,-0.1*ind,0])))
+        
+        
+        freq = int(self.properties["frequency"]/self.samplerate*SAMPLESIZE/2)
+        self.currentfreq = freq
+        self.filterarr = np.concatenate((np.ones(freq),np.zeros(SAMPLESIZE//2+1-freq)))
+        print(self.filterarr)
+
+    def updateProperty(self):
+        #self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*self.properties["value"]
+        if self.properties["enabled"]:
+            freq = min(int(self.properties["frequency"]/self.samplerate*SAMPLESIZE/2),SAMPLESIZE//2+1)
+            self.filterarr = np.concatenate((np.ones(freq),np.zeros(SAMPLESIZE//2+1-freq)))
+            self.currentfreq = freq
+        else:           
+            self.filterarr = np.ones(SAMPLESIZE//2+1)
+        self.changedProperty = False
+
+    def update(self,fpsCounter,audioHandler):
+        for cp in self.connpoints:
+            cp.updatePos(self.model.pos)
+        if self.changedProperty:
+            self.updateProperty()
+    
+    def audioUpdate(self,fpsCounter,audioHandler):
+        outsig = self.connpoints[2]
+        outsig.data = np.zeros(SAMPLESIZE, dtype=np.float32)
+        
+        if self.connpoints[1].data is not None:
+            self.properties["frequency"] = self.connpoints[1].data[0]
+            if self.properties["frequency"] != self.currentfreq:
+                self.updateProperty()
+
+        if self.connpoints[0].data is not None:
+            self.datain[:] = self.connpoints[0].data#*self.window
+            self.fft_function_forw()
+            self.fftdata[:] = self.fftdata*self.filterarr
+            self.fft_function_back()
+            outsig.data = self.dataout#/self.window
+            self.connpoints[0].data = None
+
+
+
+class SplitterNode(NodeElement):
+    def __init__(self,ph,name, pos):
+        """Inputs: A. Output: A,A,A"""
+        
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/splitternode.png"})
+        self.inputs = ["signal"]
+        self.outputs = ["A","B","C"]
+        self.lastSent = 0
+        self.connpoints = []
+        self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*880
+        for ind in range(len(self.inputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.14*ind+0.13,0])))  
+        for ind in range(len(self.outputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.35,-0.14*ind+0.13,0])))
+        
+
+
+    def update(self,fpsCounter,audioHandler):
+        for cp in self.connpoints:
+            cp.updatePos(self.model.pos)
+    
+    def audioUpdate(self,fpsCounter,audioHandler):
+        self.connpoints[1].data = np.zeros(SAMPLESIZE, dtype=np.float32)
+        self.connpoints[2].data = np.zeros(SAMPLESIZE, dtype=np.float32)
+        self.connpoints[3].data = np.zeros(SAMPLESIZE, dtype=np.float32)
+        if self.connpoints[0].data is not None:
+            self.connpoints[1].data = np.copy(self.connpoints[0].data)
+            self.connpoints[2].data = np.copy(self.connpoints[0].data)
+            self.connpoints[3].data = np.copy(self.connpoints[0].data)
+
+class EnvelopeNode(NodeElement):
+    def __init__(self,ph,name, pos):
+        """Inputs: clock. Output: envelope signal"""
+        
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/splitternode.png"})
+        self.inputs = ["clock"]
+        self.outputs = ["envelope"]
+        self.connpoints = []
+        self.lastInputValue = 0
+        self.state = "Z"
+        self.states = ["A","D","S","R","Z"]
+        self.properties = {"A":200,"D":200,"S":200,"R":200,"SLevel":0.5,"currentS":"Z"}
+        self.propertyTypes = {"A":"integer","D":"integer","S":"integer","SLevel":"float","R":"integer","currentS":"text"}
+        self.envvalue = 0
+        self.statetimer = 0
+        self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*880
+        for ind in range(len(self.inputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.14*ind+0.13,0])))  
+        for ind in range(len(self.outputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.35,-0.14*ind+0.13,0])))
+        
+
+
+    def update(self,fpsCounter,audioHandler):
+        for cp in self.connpoints:
+            cp.updatePos(self.model.pos)
+    
+    def audioUpdate(self,fpsCounter,audioHandler):
+        self.connpoints[1].data = np.zeros(SAMPLESIZE, dtype=np.float32)
+        if self.connpoints[0].data is not None:
+            for idx, x in np.ndenumerate(self.connpoints[0].data):
+                if idx[0] == 0:
+                    if x > self.lastInputValue:
+                        self.state = "A"
+                    #elif x < self.lastInputValue:
+                    #    self.state = "R"
+                if x > self.connpoints[0].data[idx[0]-1]:
+                    self.state = "A"
+                #elif x < self.connpoints[0].data[idx[0]-1]:
+                    #self.state = "R"
+                if self.state == "A":
+                    self.envvalue += 1/self.properties["A"]
+                    if self.envvalue >= 1:
+                        self.envvalue = 1.0
+                        self.state = "D"
+                elif self.state == "D":
+                    self.envvalue -= self.properties["SLevel"]/self.properties["D"]
+                    if self.envvalue <= self.properties["SLevel"]:
+                        self.state = "S"
+                        self.statetimer = self.properties["S"]
+                elif self.state == "S":
+                    self.envvalue = self.properties["SLevel"]
+                    self.statetimer -= 1
+                    if self.statetimer <=0:
+                        self.state = "R"
+                elif self.state == "R":
+                    self.envvalue -= self.properties["S"]/self.properties["R"]
+                    if self.envvalue <= 0.0:
+                        self.envvalue = 0.0
+                        self.state = "Z"
+                self.connpoints[1].data[idx] = self.envvalue
+            self.properties["currentS"] = self.state
+
+            #self.connpoints[1].data = np.copy(self.connpoints[0].data)
+            self.lastInputValue = self.connpoints[0].data[-1]
 
 class DelayNode(NodeElement):
     def __init__(self,ph,name, pos):
@@ -470,6 +756,7 @@ class DelayNode(NodeElement):
         self.lastSent = 0
         self.connpoints = []
         self.properties = {"frames":5}
+        self.propertyTypes = {"frames":"integer"}
         for ind in range(len(self.inputs)):
             self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.14*ind+0.13,0])))  
         for ind in range(len(self.outputs)):
@@ -537,14 +824,16 @@ class DelayNode(NodeElement):
 class LinearAnim(NodeElement):
     """Inputs: None. Output: constant*np.ones(n)"""
     def __init__(self,ph,name, pos):   
-        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/constantnode.png"})
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/linearanimnode.png"})
         self.inputs = []
         self.outputs = ["signal"]
         self.lastSent = 0
         self.animTime = 0
         self.connpoints = []
         
-        self.properties = {"from":100,"to":10,"time":1,"enabled":0,"repeat":0}
+        self.properties = {"from":100,"to":10,"time":1,"enabled":False,"repeat":False}
+        
+        self.propertyTypes = {"from":"float","to":"float","time":"float","enabled":"bool","repeat":"bool"}
         self.enabled = False
 
         self.value = self.properties["from"]
@@ -558,9 +847,15 @@ class LinearAnim(NodeElement):
         
 
     def updateProperty(self):
-        if self.properties["enabled"] != 0 and not self.enabled:
-            self.animTime = 0
-            self.enabled = True
+        if self.properties["enabled"]:
+            if self.enabled:
+                if self.animTime>=self.properties["time"]:
+                    self.animTime = 0
+                if self.value < self.properties["from"] or self.value > self.properties["to"]:
+                    self.value = self.properties["from"]
+            else:
+                self.animTime = 0
+                self.enabled = True
         else:
             self.enabled = False
         #self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*self.properties["value"]
@@ -578,9 +873,9 @@ class LinearAnim(NodeElement):
             self.animTime += fpsCounter.deltaTime
             self.value = lerpConst(self.properties["from"],self.properties["to"],self.animTime/self.properties["time"])
             if self.animTime>=self.properties["time"]:
-                if self.properties["repeat"]==0:
+                if not self.properties["repeat"]:
                     self.enabled = False
-                    self.properties["enabled"] = 0
+                    self.properties["enabled"] = False
                 else:
                     self.animTime = 0
 
@@ -598,19 +893,20 @@ class LinearAnim(NodeElement):
         else:
             fontHandler.drawText3D(str(int(self.value)),self.textDisplay.model.modelMat,0.05,viewMat,renderer)
 
-class Sequencer(NodeElement):
+class SequencerNode(NodeElement):
     """Inputs: clock. Output: constant*np.ones(n)"""
     def __init__(self,ph,name, pos):
-        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/delaynode.png"})
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/sequencernode.png"})
         self.inputs = ["clock"]
         self.outputs = ["signal"]
         self.lastSent = 0
         self.connpoints = []
         self.properties = {"steps":4,"freq1":440,"freq2":440,"freq3":440,"freq4":440}
+        self.propertyTypes = {"steps":"integer","freq1":"float","freq2":"float","freq3":"float","freq4":"float"}
         self.stepNames = ["freq1","freq2","freq3","freq4"]
         self.currentData = np.ones(SAMPLESIZE,dtype=np.float32)*self.properties["freq1"]
         for ind in range(len(self.inputs)):
-            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.14*ind+0.13,0])))  
+            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.14*ind,0])))  
         for ind in range(len(self.outputs)):
             self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.35,-0.1*ind,0])))
         self.clock = self.connpoints[0]
@@ -662,6 +958,7 @@ class SpeakerOut(NodeElement):
         self.connpoints = []
         self.lastSentTime = 0
         self.properties = {"volume":100}
+        self.propertyTypes = {"volume":"float"}
 
         self.outputSample = np.array([],dtype=np.int16)
         for ind in range(len(self.inputs)):
@@ -699,7 +996,7 @@ class SpeakerOut(NodeElement):
 
 class BezierCurve:
     def __init__(self,ph,fcp,tcp):
-        """Basic wrapper for decoration objects. These don't interact with anything."""
+        """Bezier curve for connecting the display elements."""
         self.name = "bez1"
         self.model = ph.loadFile("res/curve.obj","res/crystal.png")
         self.model.SetScale(0.02)
@@ -794,8 +1091,23 @@ class PropertyMenu:
         self.selectedProperty = -1
         self.string = "80"
         self.propertyList = []
+        self.dialogOpen = False
 
         self.activeNodeName = "aaa"
+
+    def openFileDialog(self):
+        root = tk.Tk()
+        root.withdraw()
+
+        path = ""
+
+        file_path = tk.filedialog.askopenfilename(title="Open a music file",filetypes=[('Wave files','*.wav')])
+        if file_path == "":
+            path = "<not selected>"
+        else:
+            path = os.path.relpath(file_path)
+        return path
+       
 
     def draw(self,shaderhandler,renderer,fontHandler):
         """
@@ -811,7 +1123,7 @@ class PropertyMenu:
         self.shader.SetUniform1f("xcoord",0)
         renderer.Draw(self.va,self.ib,self.shader)
 
-        fontHandler.drawText(self.activeNodeName.upper(),0.55,0.4,0.05,renderer,spacing=0.7)
+        fontHandler.drawText(self.activeNodeName.upper(),0.55,0.4,0.05,renderer)
         yoffset = 0.2
         for prop in self.propertyList:
             value = self.propertyList[prop]
@@ -820,15 +1132,46 @@ class PropertyMenu:
                 isSelected = list(self.propertyList)[self.selectedProperty] == prop
             if isSelected:
                 value = self.string
+            if self.propertyTypes[prop] == "bool":
+                if value:
+                    value = "☒"
+                else:
+                    value = "☐"
+            if self.propertyTypes[prop] == "button":
+                fontHandler.drawText(prop,0.65,yoffset,0.03,renderer)
+                yoffset -= 0.05
+                continue
             if self.blinkOn or not isSelected:
-                fontHandler.drawText(prop+": "+str(value),0.55,yoffset,0.05,renderer)
+                fontHandler.drawText(prop+": "+str(value),0.55,yoffset,0.03,renderer)
             else:
-                fontHandler.drawText(prop+": ",0.55,yoffset,0.05,renderer)
-            yoffset -= 0.1
+                fontHandler.drawText(prop+": ",0.55,yoffset,0.03,renderer)
+            yoffset -= 0.05
 
     def update(self,fpsCounter,audioHandler,inputHandler,activeNode):
         self.propertyList = activeNode.properties
+        self.propertyTypes = activeNode.propertyTypes
+            
         if self.selectedProperty > -1:
+            if self.propertyTypes[list(self.propertyList)[self.selectedProperty]] == "file":
+                # someone sad mktkinter library is maybe an option
+                activeNode.properties[list(activeNode.properties)[self.selectedProperty]] = self.openFileDialog()
+                activeNode.changedProperty = True
+                self.selectedProperty = -1
+                self.blinkOn = True
+                return
+            
+            if self.propertyTypes[list(self.propertyList)[self.selectedProperty]] == "bool":
+                activeNode.properties[list(activeNode.properties)[self.selectedProperty]] = not activeNode.properties[list(activeNode.properties)[self.selectedProperty]]
+                activeNode.changedProperty = True
+                self.selectedProperty = -1
+                return
+            
+            if self.propertyTypes[list(self.propertyList)[self.selectedProperty]] == "button":
+                
+                activeNode.properties[list(activeNode.properties)[self.selectedProperty]]()
+                self.selectedProperty = -1
+                return
+
             if fpsCounter.currentTime-self.lastChangeTime>0.2:
                 self.lastChangeTime = fpsCounter.currentTime
                 self.blinkOn = not self.blinkOn
@@ -841,7 +1184,13 @@ class PropertyMenu:
             if inputHandler.isKeyDown(b'\r'):
                 # b'\r' is return
                 try:
-                    activeNode.properties[list(activeNode.properties)[self.selectedProperty]] = float(self.string)
+                    proptype = activeNode.propertyTypes[list(activeNode.properties)[self.selectedProperty]]
+                    if proptype == "integer":
+                        activeNode.properties[list(activeNode.properties)[self.selectedProperty]] = int(self.string)
+                    if proptype == "float":
+                        activeNode.properties[list(activeNode.properties)[self.selectedProperty]] = float(self.string)
+                    #if proptype == "bool":
+                    #    activeNode.properties[list(activeNode.properties)[self.selectedProperty]] = int(self.string)
                     activeNode.changedProperty = True
                     self.propertyList = activeNode.properties
                 except Exception as err:
@@ -855,10 +1204,78 @@ class PropertyMenu:
             self.propertyList = activeNode.properties
     def checkPropertyClick(self,mouseX,mouseY):
         if self.selectedProperty == -1:
-            index = int(np.ceil((0.2-mouseY)/0.1))
+            index = int(np.ceil((0.2-mouseY)/0.05))
             if(index>-1 and index<len(self.propertyList)):
                 self.selectedProperty = index
                 self.string = str(self.propertyList[list(self.propertyList)[self.selectedProperty]])
+                
+
+class AddMenu:
+    def __init__(self):
+        """
+            Add menu opening from the left
+        """
+        self.isOpen = True
+        self.backgroundTexture = Texture("res/addmenu.png")
+        self.points = np.array([-1, -1, 0.0, 0.0,
+                                -0.9, -1, 1.0, 0.0,
+                                -0.9, 1, 1.0, 1.0,
+                                -1, 1, 0.0, 1.0],dtype='float32')
+        self.indices = np.array([0,1,2, 2,3,0])
+        self.va = VertexArray()
+        self.vb = VertexBuffer(self.points)
+        self.layout = VertexBufferLayout()
+        self.layout.PushF(2)
+        self.layout.PushF(2)
+        self.va.AddBuffer(self.vb, self.layout)
+        self.ib = IndexBuffer(self.indices, 6)
+        self.shader = None
+        self.lastChangeTime = 0
+        self.blinkOn = True
+        self.selectedItem = -1
+        self.string = "80"
+        self.elementCount = 11
+        self.displayElements = 11
+        self.scrollOffset = 0
+        self.selectableClasses = [FilePlayer,SineGenerator,SquareGenerator,ConstantNode,MixerNode,DelayNode,SplitterNode,LinearAnim,SequencerNode,FilterNode,NoiseNode]
+
+        self.activeNodeName = "aaa"
+
+    def draw(self,shaderhandler,renderer,fontHandler):
+        """
+        Draw current properties for selected node
+        """
+        if self.shader is None:
+            self.shader = shaderhandler.getShader("addMenu")
+        self.backgroundTexture.Bind()
+        self.shader.Bind()
+
+        self.shader.SetUniform1i("u_Texture",0)
+        self.shader.SetUniform1f("u_time",0)
+        self.shader.SetUniform1f("xcoord",0)
+        self.shader.SetUniform1f("selectedIndex",-1)#self.selectedItem/11+1/22)
+        self.shader.SetUniform1f("ymax",self.elementCount/self.displayElements)
+        self.shader.SetUniform1f("scrollOffset",0)
+        
+        
+        renderer.Draw(self.va,self.ib,self.shader)
+
+        #fontHandler.drawText(self.activeNodeName.upper(),0.55,0.4,0.05,renderer)
+
+    def update(self,fpsCounter,audioHandler,inputHandler,activeNode):
+        return
+        
+    def checkAddClick(self,mouseX,mouseY):
+        ind = math.floor((2-(mouseY+1))*11/2)
+        if(ind < self.elementCount):
+            self.selectedItem = ind
+            return self.selectableClasses[self.selectedItem]
+            # change element
+
+        else:
+            self.selectedItem = -1
+        return None
+        
 
     
 
@@ -869,7 +1286,7 @@ class BackgroundPlane:
     Deskmat textured background
     """
     def __init__(self):
-        self.backgroundTexture = Texture("res/1px.png")
+        #self.backgroundTexture = Texture("res/1px.png")
         self.points = np.array([-1, -1, 0.0, 0.0,
                                 1, -1, 1.0, 0.0,
                                 1, 1, 1.0, 1.0,
@@ -882,20 +1299,73 @@ class BackgroundPlane:
         self.layout.PushF(2)
         self.va.AddBuffer(self.vb, self.layout)
         self.ib = IndexBuffer(self.indices, 6)
-        self.shader = None
+        
+        #self.im = Image.open("res/constantnode.png")
+        
+        #self.Width, self.Height = self.im.size
+        
+        self.average = np.zeros(SAMPLESIZE//2+1,dtype=np.int16)
 
-    def draw(self,shaderhandler,renderer,camera):
+        # SAMPLESIZE = 3072*2 = 512*3*4
+        self.twidth = SAMPLESIZE//16 # 192
+        self.theight = 1
+        self.buffer = (np.ones(SAMPLESIZE//8,dtype=np.int16)).tobytes()#np.zeros(SAMPLESIZE//2,dtype=np.int16).tobytes()
+
+        self.datafrom = pyfftw.empty_aligned(SAMPLESIZE, dtype='float32') # 3072
+        self.datato = pyfftw.empty_aligned(SAMPLESIZE//2+1, dtype='complex64') # 1537
+
+        self.fft_object = pyfftw.FFTW(self.datafrom, self.datato)
+        self.window = np.hanning(SAMPLESIZE)
+        self.logarr = np.logspace(0,np.log10(SAMPLESIZE//8),SAMPLESIZE//8,endpoint=False).astype(np.int16)
+
+        pyfftw.interfaces.cache.enable()
+
+        self.RendererId = glGenTextures(1)
+        glBindTexture(GL_TEXTURE_2D,self.RendererId)
+        #self.buffer = self.im.tobytes("raw", "RGBA", 0, -1)
+        
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,GL_NEAREST)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,GL_NEAREST)
+        
+        #glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE)
+        #glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
+
+
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, self.twidth, self.theight, 0, GL_RGBA, GL_UNSIGNED_BYTE, self.buffer)
+        glBindTexture(GL_TEXTURE_2D, 0)
+
+
+    def draw(self,shaderhandler,renderer,camera,audiohandler):
         """
         Draw current properties for selected node
         """
-        if self.shader is None:
-            self.shader = shaderhandler.getShader("background")
-        self.backgroundTexture.Bind()
+        if audiohandler.dataReady:
+            #print(len(audiohandler.dataPlaying))
+            self.datafrom[:] = np.frombuffer(audiohandler.dataPlaying, dtype=np.int16).astype(np.float32)*self.window
+            self.fft_object()
+            values = (np.absolute(self.datato)/1000).astype(np.int16)#(np.log2(np.absolute(self.datato))*30).astype(np.int16)
+            # max around 32 000 000?
+            #cmax = np.max(np.absolute(self.datato))
+            #self.average = (self.average*0.9).astype(np.int16)
+            #self.average += values//2
+            self.buffer = values[:SAMPLESIZE//8].tobytes()#self.average.tobytes()
+            #print(len(self.buffer))
+            glBindTexture(GL_TEXTURE_2D,self.RendererId)
+            #self.buffer = audiohandler.dataPlaying
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, self.twidth, self.theight, 0, GL_RGBA, GL_UNSIGNED_BYTE, self.buffer)
+            #glBindTexture(GL_TEXTURE_2D, 0)
+        
+        self.shader = shaderhandler.getShader("background")
+        #self.backgroundTexture.Bind()
+        glActiveTexture(GL_TEXTURE0)
+        glBindTexture(GL_TEXTURE_2D, self.RendererId)
         self.shader.Bind()
 
         self.shader.SetUniform1i("u_Texture",0)
-        self.shader.SetUniform1i("u_time",0)
+        self.shader.SetUniform1f("u_time",time.perf_counter())
         #self.shader.SetUniform1f("xcoord",0)
-        self.shader.SetUniform3f("xyzoom",camera.pos.x,camera.pos.y,camera.zoomLevel)
+        #self.shader.SetUniform3f("xyzoom",camera.pos.x,camera.pos.y,camera.zoomLevel)
         
         renderer.Draw(self.va,self.ib,self.shader)
