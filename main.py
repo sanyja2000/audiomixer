@@ -86,7 +86,7 @@ class Game:
             self.shaderHandler.loadShader("bezier","shaders/3.3/bezier.vert","shaders/3.3/bezier.frag")
             self.shaderHandler.loadShader("propertyMenu","shaders/3.3/propertyMenu.vert","shaders/3.3/propertyMenu.frag")
             self.shaderHandler.loadShader("addMenu","shaders/3.3/addMenu.vert","shaders/3.3/addMenu.frag")
-            self.shaderHandler.loadShader("background","shaders/3.3/background.vert","shaders/3.3/background.frag")
+            self.shaderHandler.loadShader("background","shaders/3.3/background.vert","shaders/3.3/background3dopt.frag")
         else:
             self.shaderHandler.loadShader("default","shaders/2.1/vertex_new.shader","shaders/2.1/fragment_new.shader")
             self.shaderHandler.loadShader("default_transparent","shaders/2.1/vertex_new.shader","shaders/2.1/fragment_def_transparent.shader")
@@ -365,6 +365,7 @@ class Game:
                 self.table.removeNodeObject(self.activeNode)
                 self.grabbedNode = None
                 self.activeNode = None
+                self.rearrangeNodes()
 
         if self.drawingCurve:
             self.mouseCurve.toPos = glm.vec3(output.x, output.y, 0)*50

@@ -10,14 +10,18 @@ uniform float selectedIndex;
 uniform float ymax;
 uniform float scrollOffset;
 */
+const float scaler = log(100)/log(10);
+
 void main(){
 
     //float RES = 3072/8+1;
 
     color = vec4(0.05,0.05,0.05,1.0);
 
-    vec4 texcolor = texture(u_Texture,v_TexCoord);
-    float n = (texcolor.g+texcolor.r*256)/1000;
+    //float uvx = pow(10, v_TexCoord.x*scaler)/100;
+    float uvx = v_TexCoord.x;
+    vec4 texcolor = texture(u_Texture,vec2(uvx,v_TexCoord.y));
+    float n = (texcolor.g+texcolor.r*256)/1000;//+(texcolor.a+texcolor.b*256)/1000;
 
     /*
     if(v_TexCoord.x<0.1 || v_TexCoord.x > 0.9){

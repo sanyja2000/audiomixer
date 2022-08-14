@@ -692,8 +692,8 @@ class EnvelopeNode(NodeElement):
         self.lastInputValue = 0
         self.state = "Z"
         self.states = ["A","D","S","R","Z"]
-        self.properties = {"A":200,"D":200,"S":200,"R":200,"SLevel":0.5,"currentS":"Z"}
-        self.propertyTypes = {"A":"integer","D":"integer","S":"integer","SLevel":"float","R":"integer","currentS":"text"}
+        self.properties = {"A":200,"D":200,"S":200,"SLevel":0.5,"R":200,"amplitude":1.0,"keyhold":False}
+        self.propertyTypes = {"A":"integer","D":"integer","S":"integer","SLevel":"float","R":"integer","amplitude":"float","keyhold":"bool"}
         self.envvalue = 0
         self.statetimer = 0
         self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*880
@@ -715,34 +715,46 @@ class EnvelopeNode(NodeElement):
                 if idx[0] == 0:
                     if x > self.lastInputValue:
                         self.state = "A"
-                    #elif x < self.lastInputValue:
-                    #    self.state = "R"
+                    elif x < self.lastInputValue and self.properties["keyhold"]:
+                        self.state = "R"
                 if x > self.connpoints[0].data[idx[0]-1]:
                     self.state = "A"
-                #elif x < self.connpoints[0].data[idx[0]-1]:
-                    #self.state = "R"
+                elif x < self.connpoints[0].data[idx[0]-1] and self.properties["keyhold"]:
+                    self.state = "R"
                 if self.state == "A":
-                    self.envvalue += 1/self.properties["A"]
-                    if self.envvalue >= 1:
-                        self.envvalue = 1.0
+                    if self.properties["A"] == 0:
                         self.state = "D"
-                elif self.state == "D":
-                    self.envvalue -= self.properties["SLevel"]/self.properties["D"]
-                    if self.envvalue <= self.properties["SLevel"]:
+                    else:
+                        self.envvalue += 1/self.properties["A"]
+                        if self.envvalue >= 1:
+                            self.envvalue = 1.0
+                            self.state = "D"
+                if self.state == "D":
+                    if self.properties["D"] == 0:
                         self.state = "S"
-                        self.statetimer = self.properties["S"]
-                elif self.state == "S":
-                    self.envvalue = self.properties["SLevel"]
-                    self.statetimer -= 1
-                    if self.statetimer <=0:
+                    else:
+                        self.envvalue -= self.properties["SLevel"]/self.properties["D"]
+                        if self.envvalue <= self.properties["SLevel"]:
+                            self.state = "S"
+                            self.statetimer = self.properties["S"]
+                if self.state == "S":
+                    if self.properties["S"] == 0:
                         self.state = "R"
-                elif self.state == "R":
-                    self.envvalue -= self.properties["S"]/self.properties["R"]
-                    if self.envvalue <= 0.0:
-                        self.envvalue = 0.0
+                    else:
+                        self.envvalue = self.properties["SLevel"]
+                        if not self.properties["keyhold"]:
+                            self.statetimer -= 1
+                            if self.statetimer <=0:
+                                self.state = "R"
+                if self.state == "R":
+                    if self.properties["R"] == 0:
                         self.state = "Z"
-                self.connpoints[1].data[idx] = self.envvalue
-            self.properties["currentS"] = self.state
+                    else:
+                        self.envvalue -= self.properties["SLevel"]/self.properties["R"]
+                        if self.envvalue <= 0.0:
+                            self.envvalue = 0.0
+                            self.state = "Z"
+                self.connpoints[1].data[idx] = self.envvalue*self.properties["amplitude"]
 
             #self.connpoints[1].data = np.copy(self.connpoints[0].data)
             self.lastInputValue = self.connpoints[0].data[-1]
@@ -1252,9 +1264,7 @@ class AddMenu:
         self.shader.Bind()
 
         self.shader.SetUniform1i("u_Texture",0)
-        self.shader.SetUniform1f("u_time",0)
         self.shader.SetUniform1f("xcoord",0)
-        self.shader.SetUniform1f("selectedIndex",-1)#self.selectedItem/11+1/22)
         self.shader.SetUniform1f("ymax",self.elementCount/self.displayElements)
         self.shader.SetUniform1f("scrollOffset",self.scrollOffset)
         
@@ -1324,7 +1334,7 @@ class BackgroundPlane:
 
         self.fft_object = pyfftw.FFTW(self.datafrom, self.datato)
         self.window = np.hanning(SAMPLESIZE)
-        self.logarr = np.logspace(0,np.log10(SAMPLESIZE//8),SAMPLESIZE//8,endpoint=False).astype(np.int16)
+        self.lastfft = np.zeros(SAMPLESIZE//2+1,dtype=np.int16)
 
         pyfftw.interfaces.cache.enable()
 
@@ -1353,12 +1363,15 @@ class BackgroundPlane:
             #print(len(audiohandler.dataPlaying))
             self.datafrom[:] = np.frombuffer(audiohandler.dataPlaying, dtype=np.int16).astype(np.float32)*self.window
             self.fft_object()
-            values = (np.absolute(self.datato)/1000).astype(np.int16)#(np.log2(np.absolute(self.datato))*30).astype(np.int16)
+            values = (np.absolute(self.datato)/1000)#(np.log2(np.absolute(self.datato))*30).astype(np.int16)
+            #values = (np.maximum(self.lastfft,values)*0.95)
+
+            self.lastfft = values
             # max around 32 000 000?
             #cmax = np.max(np.absolute(self.datato))
             #self.average = (self.average*0.9).astype(np.int16)
             #self.average += values//2
-            self.buffer = values[:SAMPLESIZE//8].tobytes()#self.average.tobytes()
+            self.buffer = values[:SAMPLESIZE//8].astype(np.int16).tobytes()#self.average.tobytes()
             #print(len(self.buffer))
             glBindTexture(GL_TEXTURE_2D,self.RendererId)
             #self.buffer = audiohandler.dataPlaying
