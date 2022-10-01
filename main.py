@@ -86,7 +86,9 @@ class Game:
             self.shaderHandler.loadShader("bezier","shaders/3.3/bezier.vert","shaders/3.3/bezier.frag")
             self.shaderHandler.loadShader("propertyMenu","shaders/3.3/propertyMenu.vert","shaders/3.3/propertyMenu.frag")
             self.shaderHandler.loadShader("addMenu","shaders/3.3/addMenu.vert","shaders/3.3/addMenu.frag")
-            self.shaderHandler.loadShader("background","shaders/3.3/background.vert","shaders/3.3/background3dopt.frag")
+            self.shaderHandler.loadShader("backgroundStat","shaders/3.3/background.vert","shaders/3.3/background.frag")
+            self.shaderHandler.loadShader("background2d","shaders/3.3/background.vert","shaders/3.3/background2d.frag")
+            self.shaderHandler.loadShader("background3d","shaders/3.3/background.vert","shaders/3.3/background3dopt.frag")
         else:
             self.shaderHandler.loadShader("default","shaders/2.1/vertex_new.shader","shaders/2.1/fragment_new.shader")
             self.shaderHandler.loadShader("default_transparent","shaders/2.1/vertex_new.shader","shaders/2.1/fragment_def_transparent.shader")
@@ -358,6 +360,9 @@ class Game:
 
         if self.grabbedNode != None:
             self.grabbedNode.model.SetPosition(glm.vec3(output.x,output.y,0))
+
+        if self.inputHandler.isKeyDown(b'o'):
+            self.background.changeShader()
 
         if self.activeNode != None:
             if self.inputHandler.isKeyDown(b'\x7f') and not (type(self.activeNode).__name__ in self.unDeletableClasses):

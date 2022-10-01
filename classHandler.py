@@ -1317,6 +1317,8 @@ class BackgroundPlane:
         self.layout.PushF(2)
         self.va.AddBuffer(self.vb, self.layout)
         self.ib = IndexBuffer(self.indices, 6)
+        self.usableShaders = ["backgroundStat","background2d","background3d"]
+        self.currentShader = 0
         
         #self.im = Image.open("res/constantnode.png")
         
@@ -1354,7 +1356,8 @@ class BackgroundPlane:
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, self.twidth, self.theight, 0, GL_RGBA, GL_UNSIGNED_BYTE, self.buffer)
         glBindTexture(GL_TEXTURE_2D, 0)
 
-
+    def changeShader(self):
+        self.currentShader=(self.currentShader+1)%len(self.usableShaders)
     def draw(self,shaderhandler,renderer,camera,audiohandler):
         """
         Draw current properties for selected node
@@ -1378,7 +1381,7 @@ class BackgroundPlane:
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, self.twidth, self.theight, 0, GL_RGBA, GL_UNSIGNED_BYTE, self.buffer)
             #glBindTexture(GL_TEXTURE_2D, 0)
         
-        self.shader = shaderhandler.getShader("background")
+        self.shader = shaderhandler.getShader(self.usableShaders[self.currentShader])
         #self.backgroundTexture.Bind()
         glActiveTexture(GL_TEXTURE0)
         glBindTexture(GL_TEXTURE_2D, self.RendererId)
