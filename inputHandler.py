@@ -1,7 +1,6 @@
 from audioop import mul
 from OpenGL.GLUT import *
 import sys
-from cv2 import multiply
 import glm
 
 class InputHandler:

@@ -43,7 +43,7 @@ def dist(a,b):
     return math.sqrt((b[0]-a[0])**2+(b[1]-a[1])**2+(b[2]-a[2])**2)
 
 def lerpConst(f,t,n):
-    # Lerp with constaints
+    # Lerp with constraints
     val = f*(1-n)+t*n
     if f>t:
         f,t=t,f
@@ -90,7 +90,7 @@ class Decoration:
 
 class NodeElement:
     def __init__(self,ph,props):
-        """Inputs: freq,amp. Output: wave signal"""
+        """ Default element """
         self.name = props["name"]
         self.model = ph.loadFile(props["file"],props["texture"])
         self.model.SetScale(props["scale"])
@@ -297,7 +297,7 @@ class FilePlayer(NodeElement):
         else:
             self.properties = {"file":name,"cue":False,"cueLength":10,"speed":1,"paused":False,"reset":self.resetFile}
             self.changeFileTo(name)
-        self.propertyTypes = {"file":"file","cue":"bool","cueLength":"integer","speed":"float","paused":"bool","reset":"button"}
+        self.propertyTypes = {"file":"openfile","cue":"bool","cueLength":"integer","speed":"float","paused":"bool","reset":"button"}
         self.cueTime = 0
         self.cueEnabled = True
         self.cuePoint = 0
@@ -373,6 +373,77 @@ class FilePlayer(NodeElement):
                 outsig.data = lerparr(np.frombuffer(outsig.data, dtype=np.int16),SAMPLESIZE)
 
 
+class FileSaver(NodeElement):
+    def __init__(self,ph,name, pos):
+        """Inputs: None. Output: file signal"""
+        
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/inputfile.png"})
+        self.inputs = ["signal"]
+        self.outputs = ["out"]
+        self.lastSent = 0
+        self.validFile = False
+        self.openedFile = ""
+        if name == "":
+            self.properties = {"file":"<not selected>","recording":True,"reset":self.resetFile,"save":self.saveFile}
+        else:
+            self.properties = {"file":name,"recording":True,"reset":self.resetFile,"save":self.saveFile}
+            self.changeFileTo(name)
+        self.propertyTypes = {"file":"savefile","recording":"bool","reset":"button","save":"button"}
+        self.cueTime = 0
+        self.cueEnabled = True
+        self.cuePoint = 0
+        self.connpoints = []
+        for ind in range(len(self.inputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.55,-0.1*ind,0])))  
+        for ind in range(len(self.outputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.55,-0.1*ind,0])))
+
+    def resetFile(self):
+        if self.validFile:
+            self.wf.setpos(0)
+
+    def saveFile(self):
+        if self.validFile:
+            self.wf.close()
+            self.validFile = False
+            self.properties["file"] = "<not selected>"
+            print("File saved")
+            self.openedFile = ""
+
+    def changeFileTo(self,filename):
+        self.wf = wave.open(filename, 'wb')
+        self.wf.setnchannels(1)
+        self.wf.setsampwidth(2)
+        self.wf.setframerate(44100)
+        self.validFile = True
+        self.openedFile = filename
+
+    def updateProperty(self):
+        if self.properties["file"]=="<not selected>":
+            self.validFile = False
+        elif self.properties["file"]!=self.openedFile:
+            self.changeFileTo(self.properties["file"])
+
+
+    def update(self,fpsCounter,audioHandler):
+        for cp in self.connpoints:
+            cp.updatePos(self.model.pos)
+        if self.changedProperty:
+            self.updateProperty()
+    
+    def audioUpdate(self,fpsCounter,audioHandler):
+        insig = self.connpoints[0]
+        outsig = self.connpoints[1]
+        if not insig.bezier is None and not insig.data is None: # and data is not null
+            if self.validFile and self.properties["recording"]:
+                cur = fpsCounter.currentTime
+                if not audioHandler.dataReady and cur-self.lastSent>fpsCounter.deltaTime:
+                    self.wf.writeframesraw(np.array(lerparr(insig.data,int(SAMPLESIZE/2.2)),dtype=np.int16).tobytes())
+                    self.lastSent = cur
+            outsig.data = np.copy(insig.data)
+
+
+
 class NoiseNode(NodeElement):
     def __init__(self,ph,name, pos):
         """Inputs: amp. Output: sinewave signal"""
@@ -401,26 +472,7 @@ class NoiseNode(NodeElement):
             cp.updatePos(self.model.pos)
     def audioUpdate(self,fpsCounter,audioHandler):
         self.connpoints[0].data = np.random.normal(0, 2**15, SAMPLESIZE)
-        """
-        for cp in self.connpoints:
-            if cp.name == "freq":
-                if cp.data is None:
-                    self.freq = self.deffreq
-                else:
-                    self.freq = np.abs(cp.data[0])
-            if cp.name == "amp":
-                if cp.data is not None:
-                    self.amp = cp.data
-                else:
-                    self.amp = self.defamp
-            if cp.name == "signal" and cp.bezier != None:
-                cur = fpsCounter.currentTime
-                if not audioHandler.dataReady  and cur-self.lastSent>fpsCounter.deltaTime:
-                    mult = self.freq/(44100/3.1415)
-                    cp.data = np.sin((np.arange(SAMPLESIZE)+self.processedFrames)*mult)*self.amp+self.properties["offset"]
-                    self.lastSent = cur
-                    self.processedFrames += SAMPLESIZE
-        """
+
         
 
 
@@ -434,8 +486,8 @@ class Keyboard(NodeElement):
         self.outputs = ["freq","gate"]
         self.lastSent = 0
         self.connpoints = []
-        self.properties = {"freq":261.63,"mult":1}
-        self.propertyTypes = {"freq":"float","mult":"float"}
+        self.properties = {"freq":261.63,"mult":1, "note":False}
+        self.propertyTypes = {"freq":"float","mult":"float","note":"bool"}
         self.gate = 0
         self.keys = "ysxdcvgbhnjm,"
         self.freqs = [261.63,277.18,293.66,311.13,329.63,349.23,369.99,392,415.3,440,466.16,493.88,523.25]
@@ -450,7 +502,10 @@ class Keyboard(NodeElement):
         
 
     def updateProperty(self):
-        self.outputKey = np.ones(SAMPLESIZE,dtype=np.float32)*self.properties["freq"]/440
+        if self.properties["note"]:
+            self.outputKey = np.ones(SAMPLESIZE,dtype=np.float32)*self.properties["freq"]
+        else:
+            self.outputKey = np.ones(SAMPLESIZE,dtype=np.float32)*self.properties["freq"]/440    
         #self.outputMult = np.ones(SAMPLESIZE,dtype=np.float32)*self.properties["mult"]
         self.outputGate = np.ones(SAMPLESIZE,dtype=np.float32)*self.gate
         self.changedProperty = False
@@ -578,11 +633,73 @@ class MixerNode(NodeElement):
             self.bconn.data = None
             #outsig.data = np.maximum(self.bconn.data, outsig.data)
 
+class EffectNode(NodeElement):
+    def __init__(self,ph,name, pos):
+        """Inputs: A,B. Output: A+B"""
+        
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/mixernode.png"})
+        self.inputs = ["A"]
+        self.outputs = ["signal"]
+        self.availableEffects = ["clip","bitcrunch"]
+        self.currentEffect = 0
+        self.properties = {"effect":self.availableEffects[self.currentEffect],"change effect":self.changeEffect,"strength":7,"enabled":True}
+        self.propertyTypes = {"effect":"string","change effect":"button","strength":"integer","enabled":"bool"}
+        self.N = 2**13
+        self.connpoints = []
+        self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*880
+        for ind in range(len(self.inputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.14*ind+0.13,0])))  
+        for ind in range(len(self.outputs)):
+            self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.35,-0.1*ind,0])))
+        
+        self.aconn = self.connpoints[0]
 
+
+    def update(self,fpsCounter,audioHandler):
+        for cp in self.connpoints:
+            cp.updatePos(self.model.pos)
+        if self.changedProperty:
+            self.updateProperty()
+            self.changedProperty = False
+    
+    def audioUpdate(self,fpsCounter,audioHandler):
+        outsig = self.connpoints[1]
+        outsig.data = np.zeros(SAMPLESIZE, dtype=np.float32)
+        multiplier = 0.5
+        
+        if self.aconn.data is not None:
+            if self.properties["enabled"]:
+                if self.properties["effect"] == "bitcrunch":
+                    np.add(outsig.data, (self.aconn.data//self.N)*self.N, out=outsig.data, casting="unsafe")
+                elif self.properties["effect"] == "clip":
+                    #np.add(outsig.data, (self.aconn.data), out=outsig.data, casting="unsafe")
+                    np.clip(self.aconn.data, -self.N, self.N, out=outsig.data)
+                    np.multiply(outsig.data, self.properties["strength"]/1,out=outsig.data)
+            else:
+                np.add(outsig.data, self.aconn.data, out=outsig.data, casting="unsafe")
+            self.aconn.data = None
+            #outsig.data = np.maximum(self.aconn.data, outsig.data)
+    def updateProperty(self):
+        if self.properties["effect"] != self.availableEffects[self.currentEffect]:
+            self.properties["effect"] = self.availableEffects[self.currentEffect]
+
+        if self.properties["strength"]>10:
+            self.properties["strength"] = 10
+        elif self.properties["strength"] < 0:
+            self.properties["strength"] = 0
+        if self.properties["effect"] == "bitcrunch":
+            self.N = 2**(6+self.properties["strength"])
+        elif self.properties["effect"] == "clip":
+            self.N = 2**(16-self.properties["strength"])
+    def changeEffect(self):
+        self.currentEffect = (self.currentEffect+1)%len(self.availableEffects)
+        self.updateProperty()
 
 class FilterNode(NodeElement):
     def __init__(self,ph,name, pos):
-        """Inputs: A,B. Output: filtered A"""
+        """Inputs: A,B. Output: filtered A
+            Types: highpass, lowpass, bandpass
+        """
         
         NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/filternode.png"})
         self.inputs = ["A","B"]
@@ -590,9 +707,11 @@ class FilterNode(NodeElement):
         self.lastSent = 0
         self.connpoints = []
 
-        self.properties = {"frequency":4000,"enabled":True}
-        self.propertyTypes = {"frequency":"float","enabled":"bool"}
-
+        self.allowedTypes = ["highpass","lowpass"]
+        self.currentType = 0
+        self.properties = {"frequency":4000,"enabled":True,"type":self.allowedTypes[self.currentType],"change type":self.changeType}
+        self.propertyTypes = {"frequency":"float","enabled":"bool","type":"string","change type":"button"}
+        
         self.datain = pyfftw.empty_aligned(SAMPLESIZE, dtype='float32')
         self.fftdata = pyfftw.empty_aligned(SAMPLESIZE//2+1, dtype='complex64')
         self.dataout = pyfftw.empty_aligned(SAMPLESIZE, dtype='float32')
@@ -614,14 +733,22 @@ class FilterNode(NodeElement):
         freq = int(self.properties["frequency"]/self.samplerate*SAMPLESIZE/2)
         self.currentfreq = freq
         self.filterarr = np.concatenate((np.ones(freq),np.zeros(SAMPLESIZE//2+1-freq)))
-        print(self.filterarr)
 
     def updateProperty(self):
         #self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*self.properties["value"]
+        
+        if self.allowedTypes.index(self.properties["type"])<0:
+            self.properties["type"] = self.allowedTypes[0]
+        
         if self.properties["enabled"]:
-            freq = min(int(self.properties["frequency"]/self.samplerate*SAMPLESIZE/2),SAMPLESIZE//2+1)
-            self.filterarr = np.concatenate((np.ones(freq),np.zeros(SAMPLESIZE//2+1-freq)))
-            self.currentfreq = freq
+            if self.properties["type"] == "lowpass":
+                freq = min(int(self.properties["frequency"]/self.samplerate*SAMPLESIZE/2),SAMPLESIZE//2+1)
+                self.filterarr = np.concatenate((np.ones(freq),np.zeros(SAMPLESIZE//2+1-freq)))
+                self.currentfreq = freq
+            if self.properties["type"] == "highpass":
+                freq = min(int(self.properties["frequency"]/self.samplerate*SAMPLESIZE/2),SAMPLESIZE//2+1)
+                self.filterarr = np.concatenate((np.zeros(freq),np.ones(SAMPLESIZE//2+1-freq)))
+                self.currentfreq = freq
         else:           
             self.filterarr = np.ones(SAMPLESIZE//2+1)
         self.changedProperty = False
@@ -648,6 +775,11 @@ class FilterNode(NodeElement):
             self.fft_function_back()
             outsig.data = self.dataout#/self.window
             self.connpoints[0].data = None
+    def changeType(self):
+        self.currentType = (self.currentType+1)%len(self.allowedTypes)
+        self.properties["type"] = self.allowedTypes[self.currentType]
+        self.updateProperty()
+        
 
 
 
@@ -1118,7 +1250,20 @@ class PropertyMenu:
         if file_path == "":
             path = "<not selected>"
         else:
-            path = os.path.relpath(file_path)
+            path = file_path
+        return path
+
+    def saveFileDialog(self):
+        root = tk.Tk()
+        root.withdraw()
+
+        path = ""
+
+        file_path = tk.filedialog.asksaveasfilename(title="Save as a music file",filetypes=[('Wave files','*.wav')])
+        if file_path == "":
+            path = "<not selected>"
+        else:
+            path = file_path
         return path
        
 
@@ -1165,9 +1310,17 @@ class PropertyMenu:
         self.propertyTypes = activeNode.propertyTypes
             
         if self.selectedProperty > -1:
-            if self.propertyTypes[list(self.propertyList)[self.selectedProperty]] == "file":
+            if self.propertyTypes[list(self.propertyList)[self.selectedProperty]] == "openfile":
                 # someone sad mktkinter library is maybe an option
                 activeNode.properties[list(activeNode.properties)[self.selectedProperty]] = self.openFileDialog()
+                activeNode.changedProperty = True
+                self.selectedProperty = -1
+                self.blinkOn = True
+                return
+            
+            if self.propertyTypes[list(self.propertyList)[self.selectedProperty]] == "savefile":
+                # someone sad mktkinter library is maybe an option
+                activeNode.properties[list(activeNode.properties)[self.selectedProperty]] = self.saveFileDialog()
                 activeNode.changedProperty = True
                 self.selectedProperty = -1
                 self.blinkOn = True
@@ -1250,7 +1403,7 @@ class AddMenu:
         self.elementCount = 12
         self.displayElements = 11
         self.scrollOffset = 0
-        self.selectableClasses = [FilePlayer,SineGenerator,SquareGenerator,ConstantNode,MixerNode,DelayNode,SplitterNode,LinearAnim,SequencerNode,FilterNode,NoiseNode,EnvelopeNode]
+        self.selectableClasses = [FilePlayer,SineGenerator,SquareGenerator,ConstantNode,MixerNode,FileSaver,SplitterNode,LinearAnim,SequencerNode,FilterNode,NoiseNode,EffectNode]
 
         self.activeNodeName = "aaa"
 
