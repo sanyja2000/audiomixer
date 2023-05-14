@@ -29,23 +29,15 @@ float sdBox( vec3 p, vec3 b)
 
 float map_the_world(in vec3 p)
 {
-    //float sphere_0 = distance_from_sphere(p, vec3(0.0), 1.0);
     float d = 1001.0;
     
     for(int i=0;i<30;i++){
-        //vec4 texcolor = texture(u_Texture,vec2(pow(2.718281,(i/20.0)*0.694),0.0));
         vec4 texcolor = texture(u_Texture,vec2(pow(10,(i/20.0)-1)*1.12,0.0));
         
         float n = (texcolor.g+texcolor.r*256)/600;
-        //d = min(sdBox(p-vec3(i/20.0-0.75,n,0.0), vec3(0.02)),d);
-        //d = min(sdSphere(p,vec3(i/20.0-0.75,n,0.0), 0.02),d);
         d = min(sdSphere(p,vec3(sin(i+u_time)*0.3,n,cos(i+u_time)*0.3), 0.02),d);
    
     }
-    
-    
-
-    // Later we might have sphere_1, sphere_2, cube_3, etc...
 
     return d;
 }
@@ -95,7 +87,6 @@ vec3 ray_march(in vec3 ro, in vec3 rd)
         total_distance_traveled += distance_to_closest;
     }
     return vec3(0.05,0.05,0.05);
-    //return vec3(0.0);
 }
 
 
@@ -106,7 +97,7 @@ void main(){
 
     vec3 camera_position = vec3(0.0, 1.0, -1.0);
     vec3 ro = camera_position;
-    vec3 rd = rotateX(-0.5236)*normalize(vec3(uv, 1.0));//rotateX(sin(u_time))*vec3(uv, 1.0);
+    vec3 rd = rotateX(-0.5236)*normalize(vec3(uv, 1.0));
 
     vec3 shaded_color = ray_march(ro, rd);
 
