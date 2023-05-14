@@ -6,6 +6,7 @@ import time
 import wave
 from OpenGL.GLUT import *
 import glm
+import tkinter.filedialog
 import tkinter as tk
 from OpenGL.GL import *
 import pyfftw
@@ -305,6 +306,7 @@ class FilePlayer(NodeElement):
 
     def changeFileTo(self,filename):
         self.wf = wave.open(filename, 'rb')
+        print(self.wf.getparams())
         self.validFile = True
         self.openedFile = filename
 
@@ -373,7 +375,7 @@ class FileSaver(NodeElement):
         
         NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/outputfile.png"})
         self.inputs = ["signal"]
-        self.outputs = []
+        self.outputs = ["out"]
         self.lastSent = 0
         self.validFile = False
         self.openedFile = ""
@@ -408,7 +410,7 @@ class FileSaver(NodeElement):
         self.wf = wave.open(filename, 'wb')
         self.wf.setnchannels(1)
         self.wf.setsampwidth(2)
-        self.wf.setframerate(44100)
+        self.wf.setframerate(48000)
         self.validFile = True
         self.openedFile = filename
 
@@ -432,7 +434,8 @@ class FileSaver(NodeElement):
             if self.validFile and self.properties["recording"]:
                 cur = fpsCounter.currentTime
                 if not audioHandler.dataReady and cur-self.lastSent>fpsCounter.deltaTime:
-                    self.wf.writeframesraw(np.array(lerparr(insig.data,int(SAMPLESIZE/2.2)),dtype=np.int16).tobytes())
+                    #self.wf.writeframesraw(np.array(lerparr(insig.data,int(SAMPLESIZE/2)),dtype=np.int16).tobytes())
+                    self.wf.writeframesraw(np.array((insig.data[::2]+insig.data[1::2])/2,dtype=np.int16).tobytes())
                     self.lastSent = cur
             outsig.data = np.copy(insig.data)
 
