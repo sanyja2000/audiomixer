@@ -34,13 +34,9 @@ class Game:
         glutInit()
         glutInitDisplayMode(GLUT_RGBA)
 
-        
-        OPENGL_VERSION = 3
 
-        if OPENGL_VERSION == 3:
-            glutInitContextVersion (3, 3)
-        else:
-            glutInitContextVersion (2, 1)
+        glutInitContextVersion (3, 3)
+
         glutInitContextProfile (GLUT_COMPATIBILITY_PROFILE)
         self.windowSize = [1280,720]
         glutInitWindowSize(self.windowSize[0], self.windowSize[1])
@@ -70,25 +66,17 @@ class Game:
 
         self.shaderHandler = ShaderHandler()
         
-        if OPENGL_VERSION == 3:
-            self.shaderHandler.loadShader("default","shaders/3.3/vertex_new.shader","shaders/3.3/fragment_new.shader")
-            self.shaderHandler.loadShader("instanced","shaders/3.3/instanced.vert","shaders/3.3/fragment_new.shader")
-            self.shaderHandler.loadShader("default_transparent","shaders/3.3/vertex_new.shader","shaders/3.3/fragment_def_transparent.shader")
-            self.shaderHandler.loadShader("font","shaders/3.3/vertex_font3d.shader","shaders/3.3/fragment_font.shader")
-            self.shaderHandler.loadShader("bezier","shaders/3.3/bezier.vert","shaders/3.3/bezier.frag")
-            self.shaderHandler.loadShader("propertyMenu","shaders/3.3/propertyMenu.vert","shaders/3.3/propertyMenu.frag")
-            self.shaderHandler.loadShader("addMenu","shaders/3.3/addMenu.vert","shaders/3.3/addMenu.frag")
-            self.shaderHandler.loadShader("backgroundStat","shaders/3.3/background.vert","shaders/3.3/background.frag")
-            self.shaderHandler.loadShader("background2d","shaders/3.3/background.vert","shaders/3.3/background2d.frag")
-            self.shaderHandler.loadShader("background3d","shaders/3.3/background.vert","shaders/3.3/background3dopt.frag")
-        else:
-            self.shaderHandler.loadShader("default","shaders/2.1/vertex_new.shader","shaders/2.1/fragment_new.shader")
-            self.shaderHandler.loadShader("default_transparent","shaders/2.1/vertex_new.shader","shaders/2.1/fragment_def_transparent.shader")
-            self.shaderHandler.loadShader("font","shaders/2.1/vertex_font3d.shader","shaders/2.1/fragment_font.shader")
-            self.shaderHandler.loadShader("bezier","shaders/2.1/bezier.vert","shaders/2.1/bezier.frag")
-            self.shaderHandler.loadShader("propertyMenu","shaders/2.1/propertyMenu.vert","shaders/2.1/propertyMenu.frag")
-            self.shaderHandler.loadShader("background","shaders/2.1/background.vert","shaders/2.1/background.frag")
-          
+        self.shaderHandler.loadShader("default","shaders/3.3/vertex_new.shader","shaders/3.3/fragment_new.shader")
+        self.shaderHandler.loadShader("instanced","shaders/3.3/instanced.vert","shaders/3.3/fragment_new.shader")
+        self.shaderHandler.loadShader("default_transparent","shaders/3.3/vertex_new.shader","shaders/3.3/fragment_def_transparent.shader")
+        self.shaderHandler.loadShader("font","shaders/3.3/vertex_font3d.shader","shaders/3.3/fragment_font.shader")
+        self.shaderHandler.loadShader("bezier","shaders/3.3/bezier.vert","shaders/3.3/bezier.frag")
+        self.shaderHandler.loadShader("propertyMenu","shaders/3.3/propertyMenu.vert","shaders/3.3/propertyMenu.frag")
+        self.shaderHandler.loadShader("addMenu","shaders/3.3/addMenu.vert","shaders/3.3/addMenu.frag")
+        self.shaderHandler.loadShader("backgroundStat","shaders/3.3/background.vert","shaders/3.3/background.frag")
+        self.shaderHandler.loadShader("background2d","shaders/3.3/background.vert","shaders/3.3/background2d.frag")
+        self.shaderHandler.loadShader("background3d","shaders/3.3/background.vert","shaders/3.3/background3dopt.frag")
+
 
         self.fontHandler = FontHandler(self.shaderHandler.getShader("font"))
 
