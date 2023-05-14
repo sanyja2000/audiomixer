@@ -1,22 +1,14 @@
 import math
 from multiprocessing import parent_process
-
-from engine.objectHandler import Object3D
 from engine.renderer import IndexBuffer, Shader, Texture, VertexArray, VertexBuffer, VertexBufferLayout
 import numpy as np
 import time
-from PIL import Image
-import pyrr
-import random
 import wave
 from OpenGL.GLUT import *
 import glm
 import tkinter as tk
-import tkinter.filedialog
-import os.path
 from OpenGL.GL import *
 import pyfftw
-from threading import Thread
 """
 This file contains the classes for different types of objects in the map files.
 
@@ -348,13 +340,15 @@ class FilePlayer(NodeElement):
             self.updateProperty()
     
     def audioUpdate(self,fpsCounter,audioHandler):
+        outsig = self.connpoints[1]
         if not self.validFile or self.properties["paused"]:
+            outsig.data = None
             return
         if self.connpoints[0].bezier != None and self.connpoints[0].data is not None:
             d = np.abs(self.connpoints[0].data[0])
             if d>0.01:
                 self.properties["speed"] = d
-        outsig = self.connpoints[1]
+        
         if outsig.bezier != None:
             cur = fpsCounter.currentTime 
             if not audioHandler.dataReady and cur-self.lastSent>fpsCounter.deltaTime:
@@ -377,9 +371,9 @@ class FileSaver(NodeElement):
     def __init__(self,ph,name, pos):
         """Inputs: None. Output: file signal"""
         
-        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/inputfile.png"})
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/input.obj","texture":"res/outputfile.png"})
         self.inputs = ["signal"]
-        self.outputs = ["out"]
+        self.outputs = []
         self.lastSent = 0
         self.validFile = False
         self.openedFile = ""
@@ -637,7 +631,7 @@ class EffectNode(NodeElement):
     def __init__(self,ph,name, pos):
         """Inputs: A,B. Output: A+B"""
         
-        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/mixernode.png"})
+        NodeElement.__init__(self,ph,{"name":name, "pos":pos,"rot":[1.57,0,0],"scale":0.3,"file":"res/inputsmall.obj","texture":"res/effectnode.png"})
         self.inputs = ["A"]
         self.outputs = ["signal"]
         self.availableEffects = ["clip","bitcrunch"]
@@ -648,7 +642,7 @@ class EffectNode(NodeElement):
         self.connpoints = []
         self.outputData = np.ones(SAMPLESIZE,dtype=np.int16)*880
         for ind in range(len(self.inputs)):
-            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.14*ind+0.13,0])))  
+            self.connpoints.append(ConnectionPoint(ph,self,self.inputs[ind],"in",pos,glm.vec3([0.35,-0.1*ind,0])))  
         for ind in range(len(self.outputs)):
             self.connpoints.append(ConnectionPoint(ph,self,self.outputs[ind],"out",pos,glm.vec3([-0.35,-0.1*ind,0])))
         
@@ -696,6 +690,7 @@ class EffectNode(NodeElement):
         self.updateProperty()
 
 class FilterNode(NodeElement):
+    # TODO: rework?
     def __init__(self,ph,name, pos):
         """Inputs: A,B. Output: filtered A
             Types: highpass, lowpass, bandpass
@@ -814,6 +809,7 @@ class SplitterNode(NodeElement):
             self.connpoints[3].data = np.copy(self.connpoints[0].data)
 
 class EnvelopeNode(NodeElement):
+    # TODO
     def __init__(self,ph,name, pos):
         """Inputs: clock. Output: envelope signal"""
         
@@ -1400,10 +1396,10 @@ class AddMenu:
         self.blinkOn = True
         self.selectedItem = -1
         self.string = "80"
-        self.elementCount = 12
+        self.elementCount = 13
         self.displayElements = 11
         self.scrollOffset = 0
-        self.selectableClasses = [FilePlayer,SineGenerator,SquareGenerator,ConstantNode,MixerNode,FileSaver,SplitterNode,LinearAnim,SequencerNode,FilterNode,NoiseNode,EffectNode]
+        self.selectableClasses = [FilePlayer,FileSaver,SineGenerator,SquareGenerator,ConstantNode,LinearAnim,NoiseNode,MixerNode,SplitterNode,SequencerNode,FilterNode,EffectNode,DelayNode]
 
         self.activeNodeName = "aaa"
 

@@ -15,14 +15,14 @@ void main(){
         newTc.y = mod(newTc.y-scrollOffset,1);
         vec4 texColor = texture(u_Texture, newTc);
     
-    
+    /*
         if(texColor.a < 0.2){
             color = vec4(0.0,0.0,0.0,0.6);
         }
         else{
-            
-            color = texColor;
-        }
+            */
+            color = texColor;/*
+        }*/
     }
     
     //;

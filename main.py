@@ -1,19 +1,11 @@
 from OpenGL.GL import *
 from OpenGL.GLUT import *
 from OpenGL.GLU import *
-from ctypes import c_void_p, pointer, sizeof, c_float
 import numpy as np
-import sys, math
 import time
 from engine.renderer import VertexBuffer, IndexBuffer, VertexArray, VertexBufferLayout, Shader, Renderer, Texture, FPSCounter, ShaderHandler
-import classHandler
 from inputHandler import InputHandler
 from engine.audioHandler import AudioHandler
-from engine.objloader import processObjFile
-from engine.objectHandler import Object3D
-import pyrr
-import random
-from threading import Thread
 from classHandler import *
 from engine.fontHandler import FontHandler
 from table import Table
@@ -351,9 +343,6 @@ class Game:
         self.speakerOut.draw(self.shaderHandler,self.renderer,viewMat)
         self.speakerOut.update(self.FPSCounter,self.audioHandler)
 
-        classHandler.CPH.DrawWithShader(self.shaderHandler,self.renderer,viewMat)
-
-        #print(self.table.objects[0].model.pos)
 
         # Get mouseCoordinate in 3D space
         output = self.inputHandler.screenToWorld(self.proj,self.camera,self.inputHandler.mouseX,self.inputHandler.mouseY)

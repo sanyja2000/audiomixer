@@ -1,9 +1,6 @@
 import pyaudio, time, numpy as np
 import wave
 from threading import Thread
-from functools import partial
-import math
-import struct
 
 class AudioHandler:
     def __init__(self):
