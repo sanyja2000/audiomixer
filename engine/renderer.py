@@ -117,7 +117,7 @@ class Shader:
         else:
             location = glGetUniformLocation(self.RendererId, name)
             if location == -1:
-                print("Warning: uniform location "+name+" doesn't exist")
+                #print("Warning: uniform location "+name+" doesn't exist")
                 if name == "lightPos":
                     raise ArgumentError
             self.LocationCache[name] = location
